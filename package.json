@@ -1,0 +1,16 @@
+{
+  "name": "scrobble-audit",
+  "version": "1.0.0",
+  "description": "Auditoria e análise de scrobbles do Last.fm por intervalo exato de data e hora.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "python servidor.py",
+    "test": "node --test \"tests/*.test.js\""
+  },
+  "keywords": ["lastfm", "scrobble", "audit", "analytics", "vercel"]
+}

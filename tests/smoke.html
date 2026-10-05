@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scrobble Audit — smoke test</title>
+    <link rel="stylesheet" href="../assets/css/styles.css" />
+    <style>
+      .smoke-banner { background: #fdf3e1; color: #6b4000; text-align: center; font: 600 12px/1.4 system-ui; padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Página de TESTE para desenvolvimento: carrega a interface real com a API
+      da Last.fm SIMULADA (tests/fakeLastfm.js). Nenhuma requisição real é feita.
+      Uso: sirva a raiz do projeto e abra /tests/smoke.html?run=audit
+      Cenários (?run=): audit | ranking | notfound | ratelimit | empty
+      Tema: &theme=dark|light   Visualização: &group=track
+    -->
+    <div class="smoke-banner">DADOS SIMULADOS — página de teste (tests/smoke.html)</div>
+    <script type="module">
+      import { FakeLastfm, generate, makeTrack } from './fakeLastfm.js';
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('banner') === '0') document.querySelector('.smoke-banner').remove(); // capturas para o README
+      const scenario = params.get('run') || '';
+      const now = Math.floor(Date.now() / 1000);
+      const data = generate(4000, now - 10 * 86400, now, 1);
+      for (let i = 0; i < 3; i++) data.push(makeTrack(now - 3600 - i * 12, 'Artist 3', 'Track 3-1', 'Album 3')); // intervalos curtos
+      const fakes = { demo: new FakeLastfm(data), outro: new FakeLastfm(generate(2500, now - 10 * 86400, now, 2)), terceiro: new FakeLastfm(generate(5200, now - 10 * 86400, now, 3)) };
+
+      const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (url, opts) => {
+        const u = new URL(url, location.href);
+        if (u.hostname !== 'ws.audioscrobbler.com') return realFetch(url, opts);
+        await new Promise((r) => setTimeout(r, 20));
+        const method = u.searchParams.get('method');
+        const user = (u.searchParams.get('user') || '').toLowerCase();
+        if (scenario === 'ratelimit') return json({ error: 29, message: 'Rate limit exceeded' });
+        const fake = fakes[user] || (scenario === 'empty' ? new FakeLastfm([]) : null);
+        if (!fake && method !== 'track.getinfo') return json({ error: 6, message: 'User not found' });
+        if (method === 'user.getinfo') {
+          return json({ user: { name: user, realname: 'Usuário de teste', url: '', image: [], playcount: '123456', registered: { unixtime: String(now - 900 * 86400) }, country: 'Brazil' } });
+        }
+        if (method === 'user.getrecenttracks') {
+          const limit = Number(u.searchParams.get('limit') || 50);
+          const r = await fake.getRecentTracks({ from: Number(u.searchParams.get('from')), to: Number(u.searchParams.get('to')), page: Number(u.searchParams.get('page') || 1), limit });
+          return json({ recenttracks: { track: r.tracks, '@attr': { user, total: String(r.total), totalPages: String(r.totalPages), page: String(r.page), perPage: String(limit) } } });
+        }
+        if (method === 'track.getinfo') {
+          const t = u.searchParams.get('track') || '';
+          return json({ track: { name: t, duration: t.endsWith('-0') ? '0' : String(150000 + (t.length * 7919) % 120000) } });
+        }
+        return json({ error: 3, message: 'Invalid Method' });
+      };
+
+      // Estado inicial limpo + API key fictícia
+      localStorage.clear();
+      localStorage.setItem('scrobble-audit:v1:settings', JSON.stringify({ apiKey: 'smoke-test', theme: params.get('theme') || 'auto' }));
+
+      // Reaproveita o markup real do index.html
+      const html = await (await realFetch('../index.html')).text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      for (const s of doc.body.querySelectorAll('script, noscript')) s.remove();
+      document.body.insertAdjacentHTML('beforeend', doc.body.innerHTML);
+      await import('../src/main.js');
+
+      const app = window.scrobbleAudit;
+      const fmt = (sec) => {
+        const d = new Date(sec * 1000 - new Date().getTimezoneOffset() * 60000);
+        return d.toISOString().slice(0, 19);
+      };
+      const start = fmt(now - 7 * 86400);
+      const end = fmt(now);
+      if (scenario === 'audit' || scenario === 'empty' || scenario === 'notfound' || scenario === 'ratelimit') {
+        app.actions.setForm({ username: scenario === 'notfound' ? 'naoexiste' : 'demo', start, end });
+        if (params.get('group')) app.actions.setView({ group: params.get('group') });
+        await app.actions.startAudit();
+        const modals = await import('../src/ui/views/modals.js');
+        const { trackKey } = await import('../src/core/model.js');
+        const top = app.derived.stats()?.topTracks[0];
+        if (params.get('modal') === 'details') modals.openAuditDetails(app);
+        if (params.get('modal') === 'track' && top) modals.openTrackTimes(app, trackKey(top));
+        if (params.get('modal') === 'scrobble') modals.openScrobble(app, app.store.get().audit.scrobbles[0].id);
+      }
+      if (scenario === 'ranking') {
+        app.actions.setForm({ username: 'demo', start, end });
+        await app.actions.startAudit();
+        await app.actions.addCurrentAuditToRanking();
+        await app.actions.auditRankingUser('outro');
+        await app.actions.auditRankingUser('terceiro');
+        app.actions.setView({ tab: 'ranking' });
+      }
+      if (params.get('measure')) {
+        // Lista elementos que ultrapassam a largura da viewport (depuração de layout).
+        const vw = document.documentElement.clientWidth;
+        const over = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > vw + 1 && !el.closest('.table-wrap'));
+        const pre = document.createElement('pre');
+        pre.id = 'measure';
+        const lines = over.slice(0, 40).map((el) => `${el.tagName}.${[...el.classList].join('.')} right=${Math.round(el.getBoundingClientRect().right)} w=${Math.round(el.getBoundingClientRect().width)}`);
+        pre.textContent = [`vw=${vw} scrollW=${document.documentElement.scrollWidth}`, ...lines].join('\n');
+        document.body.prepend(pre);
+      }
+      document.title = 'SMOKE-DONE';
+    </script>
+  </body>
+</html>

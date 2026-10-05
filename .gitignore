@@ -1,0 +1,10 @@
+# Segredos — nunca commitar
+.env
+.dev.vars
+config.local.js
+.wrangler/
+
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

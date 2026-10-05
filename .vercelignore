@@ -1,0 +1,7 @@
+# Arquivos que não precisam ir para o deploy na Vercel
+tests/
+docs/
+servidor.py
+.env
+.env.*
+!.env.example

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scrobble Audit</title>
+    <meta name="description" content="Auditoria e análise de scrobbles do Last.fm por intervalo exato de data e hora. 100% frontend e open-source." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/css/styles.css" />
+    <!-- Configuração pública da instância (URL do proxy). Nunca contém a API key. -->
+    <script src="site.config.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Pular para o conteúdo</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="./" aria-label="Scrobble Audit — início">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 19V9M9 19V5M14 19v-7M19 19V8" /></svg>
+          <span>Scrobble Audit</span>
+        </a>
+        <nav class="tabs" id="tabs" role="tablist" aria-label="Seções">
+          <button role="tab" data-tab="audit" aria-controls="view-audit" id="tab-audit">Auditoria</button>
+          <button role="tab" data-tab="ranking" aria-controls="view-ranking" id="tab-ranking">Ranking <span class="badge" id="ranking-count" hidden></span></button>
+        </nav>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </div>
+    </header>
+
+    <main id="main" class="container">
+      <section id="view-audit" class="view" role="tabpanel" aria-labelledby="tab-audit"></section>
+      <section id="view-ranking" class="view" role="tabpanel" aria-labelledby="tab-ranking" hidden></section>
+    </main>
+
+    <footer class="footer container">
+      <p>
+        Scrobble Audit é open-source (MIT). Auditorias, filtros e ranking ficam só no seu navegador. Dados obtidos via
+        <a href="https://www.last.fm/api" target="_blank" rel="noopener">Last.fm API</a>. Sem afiliação com a Last.fm.
+      </p>
+    </footer>
+
+    <noscript><p class="container">O Scrobble Audit precisa de JavaScript habilitado.</p></noscript>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
