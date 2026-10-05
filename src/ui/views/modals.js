@@ -139,7 +139,8 @@ export function openAuditDetails(app) {
   if (!a) return;
   const v = a.verification;
   const r = a.range;
-  const statusLabel = { verified: 'Verificada', missing: 'Incompleta', extra: 'Divergente' }[v.status] || v.status;
+  const statusLabel = { verified: 'Verificada', missing: 'Incompleta', extra: 'Divergente', imported: 'Importada (não reconsultada)' }[v.status] || v.status;
+  const imp = a.imported;
   openModal({
     title: 'Detalhes da auditoria',
     subtitle: `${a.username} · ${a.sourceName}`,
@@ -154,7 +155,21 @@ export function openAuditDetails(app) {
         ['Unix', html`<code>${r.from}</code> ≤ ts ≤ <code>${r.to}</code>`],
         ['Duração', formatDuration(r.to - r.from + 1)],
       ])}
-      <h3 class="section-title">Verificação</h3>
+      ${imp
+        ? html`<h3 class="section-title">Importação</h3>
+            ${dl([
+              ['Arquivo', imp.fileName || '—'],
+              ['Formato', imp.format.toUpperCase()],
+              ['Conteúdo', imp.scope === 'filtered' ? 'resultado filtrado da auditoria original' : 'auditoria completa'],
+              imp.filters && ['Filtros da exportação', html`<code>${JSON.stringify(imp.filters)}</code>`],
+              ['Intervalo', imp.rangeDerived ? 'derivado do primeiro e do último scrobble (o arquivo não informa)' : 'informado pelo arquivo'],
+              imp.exportedAt && ['Exportado em', new Date(imp.exportedAt).toLocaleString('pt-BR')],
+              ['Importado em', new Date(imp.importedAt).toLocaleString('pt-BR')],
+              v.original && ['Verificação na exportação', `${{ verified: 'verificada', missing: 'incompleta', extra: 'divergente' }[v.original.status] || v.original.status} (${fmtNum(v.original.fetchedInWindow)} de ${fmtNum(v.original.expected)})`],
+            ])}
+            <p class="hint">Os dados vêm do arquivo e não foram reconsultados na fonte. Use “Reauditar” para verificá-los agora.</p>`
+        : ''}
+      ${imp ? '' : html`<h3 class="section-title">Verificação</h3>
       ${dl([
         ['Status', html`<span class="badge ${v.status === 'verified' ? 'badge-ok' : 'badge-warn'}">${statusLabel}</span>`],
         ['Janela consultada na API', html`<code>from=${v.queryWindow?.from}</code> <code>to=${v.queryWindow?.to}</code> <span class="muted">(1s de folga em cada lado)</span>`],
@@ -165,17 +180,26 @@ export function openAuditDetails(app) {
         ['Mudou durante a auditoria', v.changedDuringAudit ? 'sim (novos scrobbles chegaram ou foram removidos)' : 'não'],
         ['Passadas de reconciliação', fmtNum(v.reconciliationPasses ?? 0)],
         v.nowPlayingSeen && ['“Tocando agora”', 'ignorado (não é um scrobble concluído)'],
-      ])}
+      ])}`}
       <h3 class="section-title">Execução</h3>
-      ${dl([
-        ['Fonte', `${a.sourceName} (${a.source})`],
-        ['Iniciada', new Date(a.startedAt).toLocaleString('pt-BR')],
-        ['Concluída', new Date(a.finishedAt).toLocaleString('pt-BR')],
-        ['Tempo total', formatDuration(a.durationMs / 1000)],
-        ['Requisições', fmtNum(a.requests)],
-        ['Retentativas', fmtNum(a.retries)],
-        ['Salva no navegador', s.auditPersisted === false ? 'não (excede a cota do localStorage)' : 'sim'],
-      ])}
+      ${dl(
+        imp
+          ? [
+              ['Fonte', `${a.sourceName} (${a.source})`],
+              ['Auditoria original concluída em', new Date(a.finishedAt).toLocaleString('pt-BR')],
+              a.requests > 0 && ['Requisições da auditoria original', fmtNum(a.requests)],
+              ['Salva no navegador', s.auditPersisted === false ? 'não (excede a cota do localStorage)' : 'sim'],
+            ]
+          : [
+              ['Fonte', `${a.sourceName} (${a.source})`],
+              ['Iniciada', new Date(a.startedAt).toLocaleString('pt-BR')],
+              ['Concluída', new Date(a.finishedAt).toLocaleString('pt-BR')],
+              ['Tempo total', formatDuration(a.durationMs / 1000)],
+              ['Requisições', fmtNum(a.requests)],
+              ['Retentativas', fmtNum(a.retries)],
+              ['Salva no navegador', s.auditPersisted === false ? 'não (excede a cota do localStorage)' : 'sim'],
+            ],
+      )}
       <h3 class="section-title">Método</h3>
       <ul class="method">
         <li>A API é consultada com 1 segundo de folga e o intervalo exato é aplicado localmente, independentemente de a API tratar <code>from</code>/<code>to</code> como inclusivos ou exclusivos.</li>

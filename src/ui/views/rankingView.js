@@ -5,6 +5,7 @@ import { buildRange, rangeKey } from '../../core/audit.js';
 import { formatDateTime, describeTimeZone, formatDuration } from '../../core/time.js';
 import { rankingRows } from '../app.js';
 import * as modals from './modals.js';
+import { pickFile } from '../components/filePicker.js';
 
 const PHASES = { user: 'validando usuário', probe: 'consultando total', fetch: 'baixando', verify: 'verificando', reconcile: 'reconciliando', done: 'finalizando' };
 
@@ -45,6 +46,7 @@ function bind(root, app) {
     } else if (a === 'clear') {
       if (await confirmDialog({ title: 'Limpar ranking', message: 'Remove todos os usuários e o intervalo do ranking.', confirmLabel: 'Limpar', danger: true })) actions.clearRanking();
     } else if (a === 'add-current') actions.addCurrentAuditToRanking();
+    else if (a === 'import') actions.importFile(await pickFile());
   });
 }
 
@@ -88,6 +90,7 @@ function render(root, s, app) {
                 <div class="dropdown-menu"><button data-action="export" data-format="csv">CSV</button><button data-action="export" data-format="json">JSON</button></div>
               </details>`
             : ''}
+          <button class="btn btn-sm" data-action="import" ${job ? 'disabled' : ''} title="Abrir um ranking exportado (JSON ou CSV)">${icon('upload', 14)} Importar</button>
           ${r.range || r.entries.length ? html`<button class="btn btn-sm btn-ghost" data-action="clear" ${job ? 'disabled' : ''}>${icon('trash', 14)} Limpar</button>` : ''}
         </div>
         ${r.range
@@ -148,7 +151,8 @@ function render(root, s, app) {
 
 function row(e, pos, max, job) {
   const v = e.verification;
-  const vBadge = v?.status === 'verified' ? html`<span class="badge badge-ok">${icon('check', 12)} verificada</span>` : html`<span class="badge badge-warn">${icon('alert', 12)} ${v?.status || '—'}</span>`;
+  const label = { missing: 'incompleta', extra: 'divergente', imported: 'importada' }[v?.status] || v?.status || '—';
+  const vBadge = v?.status === 'verified' ? html`<span class="badge badge-ok">${icon('check', 12)} verificada</span>` : html`<span class="badge badge-warn">${icon('alert', 12)} ${label}</span>`;
   return html`<tr>
     <td class="num"><span class="rank rank-${pos <= 3 ? pos : 'n'}">${pos}</span></td>
     <td class="strong"><button class="link" data-action="details" data-user="${e.username}">${e.username}</button></td>

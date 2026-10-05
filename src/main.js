@@ -5,6 +5,7 @@ import { mountAuditView } from './ui/views/auditView.js';
 import { mountRankingView } from './ui/views/rankingView.js';
 import { openSettings } from './ui/views/modals.js';
 import { installTooltips } from './ui/components/overlay.js';
+import { installDropZone } from './ui/components/filePicker.js';
 import { $, $$, html, setHtml, icon } from './ui/dom.js';
 import { browserTimeZone, describeTimeZone } from './core/time.js';
 
@@ -20,6 +21,7 @@ applyTheme(store.get().settings.theme);
 mountAuditView($('#view-audit'), app);
 mountRankingView($('#view-ranking'), app);
 installTooltips();
+installDropZone((file) => actions.importFile(file));
 
 // 3) Cabeçalho: abas, timezone, tema, configurações
 const header = $('#topbar-actions');

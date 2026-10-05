@@ -84,6 +84,17 @@
         if (params.get('modal') === 'track' && top) modals.openTrackTimes(app, trackKey(top));
         if (params.get('modal') === 'scrobble') modals.openScrobble(app, app.store.get().audit.scrobbles[0].id);
       }
+      if (scenario === 'import') {
+        // Exporta a auditoria em JSON, limpa e importa de volta pela ação real do app.
+        app.actions.setForm({ username: 'demo', start, end });
+        await app.actions.startAudit();
+        const { auditToJSON } = await import('../src/core/export.js');
+        const st = app.store.get();
+        const json = auditToJSON({ audit: st.audit, scrobbles: st.audit.scrobbles, filters: {}, stats: null, timeZone: st.audit.range.timeZone, durations: st.durations, scope: 'all' });
+        app.actions.clearAudit();
+        await app.actions.importFile(new File([json], 'scrobble-audit_demo.json', { type: 'application/json' }));
+        if (params.get('modal') === 'details') (await import('../src/ui/views/modals.js')).openAuditDetails(app);
+      }
       if (scenario === 'ranking') {
         app.actions.setForm({ username: 'demo', start, end });
         await app.actions.startAudit();

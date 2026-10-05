@@ -7,6 +7,7 @@ import { AUDIT } from '../../config.js';
 import { listTimeZones, browserTimeZone, describeTimeZone, formatDateTime, formatDate, formatTime, formatDuration, formatTrackLength } from '../../core/time.js';
 import { columnChart, barList } from '../components/charts.js';
 import * as modals from './modals.js';
+import { pickFile } from '../components/filePicker.js';
 
 const PRESETS = [
   ['today', 'Hoje'],
@@ -63,7 +64,7 @@ export function mountAuditView(root, app) {
 
     const filtered = derived.filtered();
     const tz = derived.timeZone();
-    const summaryKey = [s.audit, filtered, tz, s.auditPersisted, s.ranking].map(identity);
+    const summaryKey = [s.audit, filtered, tz, s.auditPersisted, s.ranking, s.status].map(identity);
     if (!p || summaryKey.some((v, i) => v !== update.lastSummary?.[i])) {
       update.lastSummary = summaryKey;
       renderSummary($('#audit-summary', root), s, app);
@@ -98,6 +99,7 @@ function renderForm(form, app) {
     html`<div class="query-head">
         <h2 class="card-title">${icon('search', 18)} Nova auditoria</h2>
         <p class="muted small">Busca exata por timestamp real de cada scrobble, em qualquer intervalo.</p>
+        <button type="button" class="btn btn-sm btn-ghost query-import" data-action="import" title="Abrir um JSON ou CSV exportado pelo Scrobble Audit (também dá para arrastar o arquivo para a página)">${icon('upload', 14)} Importar</button>
       </div>
       <div class="query-grid">
         <label class="field field-user">
@@ -147,6 +149,7 @@ function renderForm(form, app) {
   });
   on(form, 'click', '[data-preset]', (_e, b) => actions.applyPreset(b.dataset.preset));
   on(form, 'click', '[data-action="cancel"]', () => actions.cancelAudit());
+  on(form, 'click', '[data-action="import"]', async () => actions.importFile(await pickFile()));
   on(form, 'click', '[data-history]', (_e, b) => {
     actions.setForm({ username: b.dataset.history });
     form.elements.username.focus();
@@ -295,6 +298,7 @@ function renderEmpty(el, s) {
       ${icon('logo', 40)}
       <h2>Audite qualquer intervalo de scrobbles</h2>
       <p class="muted">Informe um usuário e um intervalo exato — por exemplo <strong>05/10/2026 08:00 → 13:00</strong> — e o Scrobble Audit baixa, verifica e analisa cada scrobble pelo seu timestamp real.</p>
+      <p class="muted small">Já tem uma auditoria exportada? <button type="button" class="link-inline" data-action="import-empty">Importe o arquivo</button> ou arraste-o para cá.</p>
     </div>`,
   );
 }
@@ -314,6 +318,8 @@ function bindSummary(root, app) {
     else if (a === 'add-ranking') actions.addCurrentAuditToRanking();
     else if (a === 'top-artist') actions.setFilters({ artist: el.dataset.key, exact: true });
     else if (a === 'top-track') modals.openTrackTimes(app, el.dataset.key);
+    else if (a === 'reaudit-imported') actions.reauditImported();
+    else if (a === 'import-empty') pickFile().then((f) => actions.importFile(f));
   });
 }
 
@@ -332,7 +338,16 @@ function renderSummary(el, s, app) {
     verified: { cls: 'ok', ic: 'check', title: 'Contagem verificada', text: html`${fmtNum(v.fetchedInWindow)} scrobbles coletados = ${fmtNum(v.expected)} informados pela ${a.sourceName} para a janela consultada.` },
     missing: { cls: 'warn', ic: 'alert', title: 'Contagem incompleta', text: html`${fmtNum(v.fetchedInWindow)} de ${fmtNum(v.expected)} scrobbles coletados após ${v.reconciliationPasses} reconciliação(ões). Reaudite para tentar completar.` },
     extra: { cls: 'warn', ic: 'alert', title: 'Contagem divergente', text: html`Coletados ${fmtNum(v.fetchedInWindow)}; a API informa agora ${fmtNum(v.expected)}. Provavelmente houve scrobbles excluídos durante a auditoria.` },
+    imported: {
+      cls: 'info',
+      ic: 'upload',
+      title: 'Importado de arquivo',
+      text: html`${fmtNum(a.scrobbles.length)} scrobbles carregados de <strong>${a.imported?.fileName || 'arquivo'}</strong>, sem nova consulta à ${a.sourceName}.
+        ${v.original?.status === 'verified' ? html`Na exportação, a contagem estava verificada (${fmtNum(v.original.expected)}).` : v.original ? html`Na exportação, o status era “${v.original.status}”.` : 'O arquivo não traz verificação.'}
+        ${a.imported?.scope === 'filtered' ? html`<br /><span class="text-warning">Contém só o resultado filtrado da auditoria original.</span>` : ''}`,
+    },
   }[v.status] || { cls: 'warn', ic: 'info', title: 'Não verificado', text: '' };
+  const imp = a.imported;
 
   const top = stats.topTracks[0];
   const topA = stats.topArtists[0];
@@ -355,7 +370,10 @@ function renderSummary(el, s, app) {
         <div class="verify-head">${icon(vInfo.ic, 18)} <strong>${vInfo.title}</strong></div>
         <p class="small">${vInfo.text}</p>
         <p class="small muted">${formatDateTime(a.range.from, a.range.timeZone)} → ${formatDateTime(a.range.requestedTo ?? a.range.to, a.range.timeZone)} · ${describeTimeZone(a.range.timeZone, a.range.from)}</p>
-        <p class="small muted">Auditado em ${new Date(a.finishedAt).toLocaleString('pt-BR')} · ${fmtNum(a.requests)} requisições · ${formatDuration(a.durationMs / 1000)}${s.auditPersisted === false ? ' · não salvo localmente' : ''}</p>
+        ${imp
+          ? html`<p class="small muted">${imp.exportedAt ? `Exportado em ${new Date(imp.exportedAt).toLocaleString('pt-BR')} · ` : ''}importado em ${new Date(imp.importedAt).toLocaleString('pt-BR')}${imp.rangeDerived ? ' · intervalo derivado dos dados' : ''}${s.auditPersisted === false ? ' · não salvo localmente' : ''}</p>
+              <p><button class="btn btn-sm" data-action="reaudit-imported" ${s.status === 'running' ? 'disabled' : ''}>${icon('refresh', 14)} Reauditar na ${a.sourceName}</button></p>`
+          : html`<p class="small muted">Auditado em ${new Date(a.finishedAt).toLocaleString('pt-BR')} · ${fmtNum(a.requests)} requisições · ${formatDuration(a.durationMs / 1000)}${s.auditPersisted === false ? ' · não salvo localmente' : ''}</p>`}
       </div>
     </div>
     <div class="tiles" aria-label="Estatísticas">

@@ -7,6 +7,7 @@ import { trackKey } from '../core/model.js';
 import { browserTimeZone, epochToInputValue, localParts, isValidTimeZone } from '../core/time.js';
 import * as storage from '../core/storage.js';
 import { toCSV, auditToJSON, scrobbleToRecord, rankingToRecords, downloadFile, safeFilename } from '../core/export.js';
+import { parseImport, MAX_IMPORT_BYTES } from '../core/importer.js';
 import { getSource } from '../sources/registry.js';
 import { createStore, memo } from './store.js';
 import { confirmDialog, toast } from './components/overlay.js';
@@ -297,7 +298,11 @@ export function createApp() {
       const records = rankingToRecords(rankingRows(ranking).current, ranking);
       const name = safeFilename('scrobble-audit-ranking', String(ranking.range.from), String(ranking.range.to));
       if (format === 'csv') downloadFile(`${name}.csv`, toCSV(records, { delimiter: st.csvDelimiter }), 'text/csv;charset=utf-8');
-      else downloadFile(`${name}.json`, JSON.stringify({ generator: APP.name, range: ranking.range, ranking: records }, null, 2), 'application/json');
+      else {
+        // `entries` (completas) permitem reimportar sem perdas; `ranking` é a versão plana, legível.
+        const body = { kind: 'scrobble-audit/ranking', generator: { name: APP.name, version: APP.version }, generatedAt: new Date().toISOString(), range: ranking.range, ranking: records, entries: rankingRows(ranking).current };
+        downloadFile(`${name}.json`, JSON.stringify(body, null, 2), 'application/json');
+      }
     },
 
     // ----- Ranking -----
@@ -407,6 +412,71 @@ export function createApp() {
         actions.setForm({ username, start: r.startInput, end: r.endInput });
       } else actions.setForm({ username });
       actions.setView({ tab: 'audit' });
+      actions.startAudit();
+    },
+
+    // ----- Importação -----
+    /** Importa um arquivo exportado pelo app (auditoria ou ranking, JSON ou CSV). */
+    async importFile(file) {
+      if (!file) return;
+      if (file.size > MAX_IMPORT_BYTES) {
+        toast(`Arquivo grande demais (máx. ${Math.round(MAX_IMPORT_BYTES / 1048576)} MB).`, 'error');
+        return;
+      }
+      let result;
+      try {
+        result = parseImport(await file.text(), { fileName: file.name, fallbackTimeZone: timeZoneOf(store.get()) });
+      } catch (e) {
+        toast(`Não foi possível importar “${file.name}”: ${friendlyMessage(e)}`, 'error', 8000);
+        return;
+      }
+      const s = store.get();
+
+      if (result.kind === 'ranking') {
+        if (s.rankingJob) return toast('Aguarde a auditoria do ranking em andamento.', 'warning');
+        if (s.ranking.entries.length) {
+          const ok = await confirmDialog({ title: 'Importar ranking', message: `Substituir o ranking atual (${s.ranking.entries.length} usuário(s)) pelo do arquivo?`, confirmLabel: 'Substituir' });
+          if (!ok) return;
+        }
+        store.set((st) => ({ ranking: result.ranking, view: { ...st.view, tab: 'ranking' } }));
+        toast(`Ranking importado: ${fmtNum(result.ranking.entries.length)} usuário(s).`, 'success');
+        result.warnings.forEach((w) => toast(w, 'warning', 8000));
+        return;
+      }
+
+      if (s.status === 'running') return toast('Aguarde a auditoria em andamento terminar.', 'warning');
+      if (s.audit) {
+        const ok = await confirmDialog({ title: 'Importar auditoria', message: `Substituir a auditoria atual (${s.audit.username}) pela do arquivo?`, confirmLabel: 'Substituir' });
+        if (!ok) return;
+      }
+      const audit = result.audit;
+      try {
+        audit.sourceName = getSource(audit.source).name;
+      } catch {
+        /* fonte desconhecida: mantém o id */
+      }
+      const persistedOk = persistAudit(audit);
+      store.set((st) => {
+        let durations = st.durations;
+        if (result.durations.size) {
+          durations = new Map(st.durations);
+          for (const [k, ms] of result.durations) if (durations.get(k) == null) durations.set(k, ms);
+        }
+        return { audit, auditPersisted: persistedOk, durations, status: 'idle', error: null, notice: null, view: { ...st.view, tab: 'audit', page: 1 } };
+      });
+      toast(`Auditoria importada: ${fmtNum(audit.scrobbles.length)} scrobbles de ${audit.username}.`, 'success');
+      result.warnings.forEach((w) => toast(w, 'warning', 9000));
+      if (!persistedOk) toast('A auditoria importada é grande demais para o localStorage e será perdida ao recarregar.', 'warning', 9000);
+    },
+
+    /** Refaz na fonte a auditoria importada (mesmo usuário e intervalo) para verificá-la. */
+    reauditImported() {
+      const s = store.get();
+      const a = s.audit;
+      if (!a) return;
+      if (a.range.timeZone !== timeZoneOf(s)) actions.setSettings({ timeZone: a.range.timeZone });
+      if (a.range.inclusiveEnd !== s.settings.inclusiveEnd) actions.setSettings({ inclusiveEnd: a.range.inclusiveEnd });
+      actions.setForm({ username: a.username, start: a.range.startInput, end: a.range.endInput });
       actions.startAudit();
     },
 

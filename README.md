@@ -38,6 +38,7 @@ Responda perguntas como *"o que eu ouvi entre 08:00 e 13:00 de 05/10?"* ou *"em 
 - **Estatísticas e gráficos:** totais, músicas, artistas e álbuns únicos, mais ouvidos (com empates), linha do tempo, distribuição por hora e por dia da semana, top artistas e top músicas.
 - **Ranking de usuários** comparados **exatamente no mesmo intervalo**.
 - **Exportação** em CSV e JSON (resultado filtrado, auditoria completa ou ranking).
+- **Importação** dos arquivos exportados: reabra uma auditoria ou um ranking sem consultar a Last.fm de novo, ou compartilhe o arquivo com outra pessoa. Basta usar o botão **Importar** ou arrastar o arquivo para a página.
 - **Persistência local:** configurações, filtros, histórico, última auditoria e ranking ficam no `localStorage` do seu navegador e sobrevivem ao recarregar a página.
 - Tratamento de usuário inexistente, perfil privado, limite da API (com retentativa e backoff automáticos), API fora do ar, falhas de rede e cancelamento.
 - Tema claro/escuro, layout responsivo e navegação por teclado.
@@ -125,6 +126,10 @@ O `servidor.py` serve o site e o proxy em `/api/lastfm`, com os mesmos cabeçalh
 6. **Durações** (opcional). A Last.fm não envia duração junto com os scrobbles. **Buscar durações** consulta `track.getInfo` uma vez por música única (com cache local) e habilita o filtro de duração.
 7. **Exportar.** CSV ou JSON, filtrado ou completo. Em Configurações dá para trocar o separador do CSV (`;` funciona melhor no Excel em português).
 8. **Ranking.** Clique em *Adicionar ao ranking* ou use a aba **Ranking**. Todos os usuários são auditados no mesmo intervalo, e dá para reauditar, remover e exportar.
+9. **Importar.** Use **Importar** (na auditoria ou no ranking) ou arraste para a página um JSON ou CSV exportado pelo app. O tipo é detectado sozinho: auditoria completa ou filtrada, horários de uma música ou ranking.
+   - Uma auditoria importada é marcada como **Importado de arquivo**: os dados vêm do arquivo e não são reconsultados. O cartão informa se a contagem estava verificada no momento da exportação, e **Reauditar** refaz a consulta na Last.fm com o mesmo usuário e intervalo.
+   - O **JSON** guarda tudo, inclusive o intervalo e o timezone. O **CSV** não guarda o intervalo, então ele é derivado do primeiro e do último scrobble (e o app avisa).
+   - Linhas inválidas são ignoradas e contadas. Antes de substituir a auditoria ou o ranking atual, o app pede confirmação.
 
 **Intervalo e timezone.** O fim é **inclusivo** por padrão (`08:00–13:00` inclui um scrobble às `13:00:00`); em Configurações ele pode virar exclusivo, útil para encadear intervalos sem sobreposição. Se o horário digitado não existe por causa do horário de verão, o app avisa e usa o primeiro instante válido seguinte. Em horários ambíguos, usa a primeira ocorrência.
 
@@ -160,7 +165,8 @@ src/
     model.js                modelo Scrobble e deduplicação exata
     audit.js                montagem do intervalo e execução da auditoria
     filters.js · stats.js   filtros, ordenação, agrupamento e estatísticas
-    export.js · storage.js  CSV/JSON e localStorage
+    export.js · importer.js exportação e importação (CSV/JSON)
+    storage.js              localStorage
     rateLimiter.js · errors.js
   sources/
     registry.js             interface ScrobbleSource
@@ -199,9 +205,9 @@ Registre a fonte em `src/main.js` com `registerSource(...)` e converta os erros 
 npm test        # node --test "tests/*.test.js"  — Node 20+
 ```
 
-A suíte cobre timezones e horário de verão, filtros, estatísticas, exportação, o algoritmo de paginação (bordas inclusivas e exclusivas, inserções durante a busca, mais de 200 scrobbles no mesmo segundo, duplicatas, páginas vazias, 12 mil scrobbles em paralelo) e o proxy (a key nunca volta ao cliente; métodos e usos cross-site não autorizados são bloqueados).
+A suíte cobre timezones e horário de verão, filtros, estatísticas, exportação, o algoritmo de paginação (bordas inclusivas e exclusivas, inserções durante a busca, mais de 200 scrobbles no mesmo segundo, duplicatas, páginas vazias, 12 mil scrobbles em paralelo), a importação (ida e volta de todos os formatos exportados, com os três separadores de CSV) e o proxy (a key nunca volta ao cliente; métodos e usos cross-site não autorizados são bloqueados).
 
-Para ver a interface sem API key, rode `python servidor.py` e abra `/tests/smoke.html?run=audit`. Essa página usa **dados simulados** e mostra uma faixa de aviso. Outros cenários: `?run=ranking`, `notfound`, `ratelimit` e `empty`, combináveis com `&theme=dark`.
+Para ver a interface sem API key, rode `python servidor.py` e abra `/tests/smoke.html?run=audit`. Essa página usa **dados simulados** e mostra uma faixa de aviso. Outros cenários: `?run=ranking`, `import`, `notfound`, `ratelimit` e `empty`, combináveis com `&theme=dark`.
 
 ## Contribuindo
 

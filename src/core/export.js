@@ -49,6 +49,7 @@ export function auditToJSON({ audit, scrobbles, filters, stats, timeZone, durati
   const username = audit.username;
   return JSON.stringify(
     {
+      kind: 'scrobble-audit/audit',
       generator: { name: APP.name, version: APP.version },
       generatedAt: new Date().toISOString(),
       source: audit.source,
