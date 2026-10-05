@@ -4,6 +4,8 @@ import { buildRange, runAudit, rangeKey } from '../core/audit.js';
 import { DEFAULT_FILTERS, filterScrobbles, countBy, sortScrobbles, groupScrobbles, sortGroups } from '../core/filters.js';
 import { computeStats } from '../core/stats.js';
 import { trackKey } from '../core/model.js';
+import { analyzePlaylist } from '../core/playlist.js';
+import { PLAYLIST } from '../data/playlist.js';
 import { epochToInputValue, localParts } from '../core/time.js';
 import * as storage from '../core/storage.js';
 import { toCSV, auditToJSON, scrobbleToRecord, rankingToRecords, downloadFile, safeFilename } from '../core/export.js';
@@ -74,7 +76,10 @@ export function createApp() {
   // Fuso único do app (horário de Brasília); o parâmetro fica para manter as assinaturas.
   const timeZoneOf = () => TIME_ZONE;
   const playCountsOf = memo((scrobbles) => countBy(scrobbles, trackKey));
-  const filteredOf = memo((scrobbles, filters, tzName, durations) => filterScrobbles(scrobbles, filters, { timeZone: tzName, durations, playCounts: playCountsOf(scrobbles) }));
+  const playlistOf = memo((scrobbles) => analyzePlaylist(scrobbles, PLAYLIST));
+  const filteredOf = memo((scrobbles, filters, tzName, durations) =>
+    filterScrobbles(scrobbles, filters, { timeZone: tzName, durations, playCounts: playCountsOf(scrobbles), playlistPositions: playlistOf(scrobbles).positionById }),
+  );
   const statsOf = memo((list, tzName, range) => computeStats(list, { timeZone: tzName, range }));
   const rowsOf = memo((list, group, sort, scrobbles) => {
     if (group === 'none') return sortScrobbles(list, sort, { playCounts: playCountsOf(scrobbles) });
@@ -101,6 +106,11 @@ export function createApp() {
     hasApiKey() {
       const src = this.source();
       return src.hasCredentials ? src.hasCredentials() : Boolean(store.get().settings.apiKey);
+    },
+    /** Análise da playlist fixa sobre toda a auditoria (posições, saídas da ordem). */
+    playlist() {
+      const s = store.get();
+      return s.audit ? playlistOf(s.audit.scrobbles) : null;
     },
     knownDurations() {
       const s = store.get();
@@ -526,6 +536,20 @@ export function createApp() {
       if (a.range.inclusiveEnd !== s.settings.inclusiveEnd) actions.setSettings({ inclusiveEnd: a.range.inclusiveEnd });
       actions.setForm({ username: a.username, ...rangeInputs(a.range) });
       actions.startAudit();
+    },
+
+    /** Leva a lista até um scrobble e o destaca (limpa os filtros se ele estiver escondido). */
+    goToScrobble(id) {
+      if (store.get().view.group !== 'none') actions.setView({ group: 'none' });
+      let idx = derived.rows().findIndex((r) => r.id === id);
+      if (idx === -1) {
+        actions.resetFilters();
+        toast('Limpamos os filtros para mostrar esse scrobble na lista.', 'info');
+        idx = derived.rows().findIndex((r) => r.id === id);
+      }
+      if (idx === -1) return;
+      const pageSize = store.get().settings.pageSize || 100;
+      actions.setView({ page: Math.floor(idx / pageSize) + 1, highlight: id });
     },
 
     clearAllData() {

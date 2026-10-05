@@ -23,6 +23,7 @@ export const DEFAULT_FILTERS = Object.freeze({
   playsMin: '',       // reproduções da música no período auditado
   playsMax: '',
   shortGapOnly: false,
+  playlistOnly: false, // só músicas da playlist fixa (src/data/playlist.js)
 });
 
 export const SORT_OPTIONS = [
@@ -76,6 +77,7 @@ export function activeFilterCount(f) {
   }
   if (f.weekdays?.length) n++;
   if (f.shortGapOnly) n++;
+  if (f.playlistOnly) n++;
   return n;
 }
 
@@ -150,6 +152,7 @@ export function filterScrobbles(scrobbles, filters, ctx) {
       const short = (s.gapPrev != null && s.gapPrev < gap) || (s.gapNext != null && s.gapNext < gap);
       if (!short) return false;
     }
+    if (f.playlistOnly && !ctx.playlistPositions?.has(s.id)) return false;
     return true;
   });
 }

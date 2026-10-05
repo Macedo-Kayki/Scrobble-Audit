@@ -43,6 +43,21 @@ Todos os horários aparecem no **horário de Brasília**.
    - trocar a lista para **Por música**, **Por artista** ou **Por álbum**;
    - clicar em **Exportar** para baixar uma planilha ou um arquivo.
 
+### Playlist NIINK DINÂMICA: saiu da ordem?
+
+O site conhece a playlist **NIINK DINÂMICA** (32 músicas) e reconhece essas músicas nos scrobbles, mesmo quando o nome vem um pouco diferente, como em "(feat. …)" ou com acentos trocados.
+
+1. Faça uma auditoria normalmente.
+2. Em **Filtros**, marque **Só músicas da playlist NIINK DINÂMICA**.
+3. Aparece o painel **Ordem da playlist**, com quantas vezes a pessoa saiu da ordem, separado por tipo:
+   - **Pulou músicas:** por exemplo, depois da nº 3 veio a nº 6;
+   - **Voltou para trás:** depois da nº 10 veio a nº 4;
+   - **Repetiu a mesma:** a mesma música duas vezes seguidas;
+   - **Tocou outra no meio:** uma música de fora da playlist entre duas da playlist.
+4. Clique em **Ver** em qualquer caso para ver o que tocou antes e depois. Depois, **Mostrar na lista** leva até aquele scrobble na lista, destacado.
+
+Depois da última música, voltar para a primeira conta como na ordem. Uma pausa de mais de 30 minutos começa uma nova sessão, então parar de ouvir não conta como sair da ordem. A lista da playlist fica em [`src/data/playlist.js`](src/data/playlist.js).
+
 ### Ranking
 
 1. Na aba **Ranking**, escolha o período em "De" e "Até", ou clique num atalho (*Hoje*, *Últimos 7 dias*…). O atalho **Igual à aba Auditoria** copia o período que você já preencheu lá.

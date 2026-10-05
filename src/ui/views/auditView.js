@@ -8,6 +8,8 @@ import { formatDateTime, formatDate, formatTime, formatDuration, formatSpan, for
 import { columnChart, barList } from '../components/charts.js';
 import * as modals from './modals.js';
 import { pickFile } from '../components/filePicker.js';
+import { PLAYLIST } from '../../data/playlist.js';
+import { describePlaylistEvent } from '../../core/playlist.js';
 
 const PRESETS = [
   ['today', 'Hoje'],
@@ -51,6 +53,7 @@ export function mountAuditView(root, app) {
       <div id="audit-status" aria-live="polite"></div>
       <div id="audit-summary"></div>
       <div id="audit-charts" class="charts-grid"></div>
+      <div id="audit-playlist"></div>
       <div id="audit-workspace" class="workspace" hidden>
         <aside class="card filters" id="filters-panel" aria-label="Filtros"></aside>
         <section class="card results" id="results" aria-label="Resultados"></section>
@@ -85,12 +88,22 @@ export function mountAuditView(root, app) {
       lastFiltered = filtered;
       renderCharts($('#audit-charts', root), s, app);
     }
+    const playlistKey = [s.audit, s.filters.playlistOnly, s.view.plType, s.view.plLimit];
+    if (!p || playlistKey.some((v, i) => v !== update.lastPlaylist?.[i])) {
+      update.lastPlaylist = playlistKey;
+      renderPlaylist($('#audit-playlist', root), s, app);
+    }
     $('#audit-workspace', root).hidden = !s.audit;
     renderEmpty($('#audit-empty', root), s);
     const resultsKey = [s.audit, filtered, s.view, s.settings.pageSize, s.durations, s.durationJob, s.filters];
     if (!lastResultsKey || resultsKey.some((v, i) => v !== lastResultsKey[i])) {
       lastResultsKey = resultsKey;
       renderResults($('#results', root), s, app);
+      if (s.view.highlight && s.view.highlight !== update.scrolledTo) {
+        update.scrolledTo = s.view.highlight;
+        const row = $('tr.row-highlight', root);
+        if (row) requestAnimationFrame(() => row.scrollIntoView({ block: 'center' }));
+      }
     }
   };
   store.subscribe(update);
@@ -316,6 +329,10 @@ function bindSummary(root, app) {
     else if (a === 'top-track') modals.openTrackTimes(app, el.dataset.key);
     else if (a === 'reaudit-imported') actions.reauditImported();
     else if (a === 'import-empty') pickFile().then((f) => actions.importFile(f));
+    else if (a === 'pl-type') actions.setView({ plType: el.dataset.type, plLimit: 30, page: app.store.get().view.page });
+    else if (a === 'pl-more') actions.setView({ plLimit: (app.store.get().view.plLimit || 30) + 50, page: app.store.get().view.page });
+    else if (a === 'pl-event') modals.openPlaylistEvent(app, el.dataset.event);
+    else if (a === 'pl-off') actions.setFilters({ playlistOnly: false });
   });
 }
 
@@ -439,6 +456,68 @@ function renderCharts(el, s, app) {
   );
 }
 
+/* =============== Playlist =============== */
+
+const PL_TYPES = [
+  ['all', 'Todas'],
+  ['skip', 'Pulou músicas'],
+  ['back', 'Voltou para trás'],
+  ['repeat', 'Repetiu a mesma'],
+  ['outside', 'Tocou outra no meio'],
+];
+const PL_BADGE = { skip: 'Pulou', back: 'Voltou', repeat: 'Repetiu', outside: 'Outra no meio' };
+
+function renderPlaylist(el, s, app) {
+  if (!s.audit || !s.filters.playlistOnly) return setHtml(el, '');
+  const tz = app.derived.timeZone();
+  const pl = app.derived.playlist();
+  const { counts, stats } = pl;
+  const type = s.view.plType || 'all';
+  const limit = s.view.plLimit || 30;
+  const events = type === 'all' ? pl.events : pl.events.filter((e) => e.type === type);
+  const pct = stats.transitions ? Math.round((stats.inOrder / stats.transitions) * 100) : null;
+  setHtml(
+    el,
+    html`<section class="card playlist-card">
+      <div class="playlist-head">
+        <h3 class="card-title">${icon('music', 16)} Ordem da playlist ${PLAYLIST.name}</h3>
+        <span class="muted small">${PLAYLIST.tracks.length} músicas · analisando todo o período auditado · uma pausa de mais de 30 minutos começa uma nova sessão</span>
+        <button type="button" class="btn btn-sm btn-ghost" data-action="pl-off">${icon('x', 14)} Tirar filtro</button>
+      </div>
+      ${!stats.playlistScrobbles
+        ? html`<p class="muted">Nenhuma música desta playlist foi ouvida nesse período.</p>`
+        : html`<div class="tiles tiles-compact">
+              ${tile('Saiu da ordem', fmtNum(counts.total), `vez(es), em ${fmtNum(stats.transitions)} passagens de uma música para outra`, null, counts.total ? 'tile-flag' : '')}
+              ${tile('Seguiu a ordem', pct == null ? '—' : `${pct}%`, `${fmtNum(stats.inOrder)} de ${fmtNum(stats.transitions)} passagens`)}
+              ${tile('Músicas da playlist ouvidas', fmtNum(stats.playlistScrobbles), `em ${fmtNum(stats.sessions)} sessão(ões)`)}
+              ${tile('Não tocaram no período', fmtNum(stats.notHeard.length), `de ${PLAYLIST.tracks.length} músicas da playlist`)}
+            </div>
+            <div class="chips pl-types" role="group" aria-label="Tipo de saída da ordem">
+              ${PL_TYPES.map(([id, label]) => html`<button type="button" class="chip" data-action="pl-type" data-type="${id}" aria-pressed="${String(type === id)}">${label} (${fmtNum(id === 'all' ? counts.total : counts[id])})</button>`)}
+            </div>
+            ${events.length
+              ? html`<ol class="pl-events">
+                  ${events.slice(0, limit).map(
+                    (e) => html`<li class="pl-event">
+                      <span class="pl-when mono">${formatDateTime(e.ts, tz)}</span>
+                      <span class="badge pl-badge pl-${e.type}">${PL_BADGE[e.type]}</span>
+                      <span class="pl-desc">${describePlaylistEvent(e)}</span>
+                      <button type="button" class="btn btn-sm" data-action="pl-event" data-event="${e.id}">${icon('search', 14)} Ver</button>
+                    </li>`,
+                  )}
+                </ol>
+                ${events.length > limit ? html`<button type="button" class="btn btn-sm btn-block" data-action="pl-more">Mostrar mais (${fmtNum(events.length - limit)} restantes)</button>` : ''}`
+              : html`<p class="muted small">${counts.total ? 'Nenhuma saída deste tipo.' : 'Seguiu a ordem da playlist o tempo todo. 🎯'}</p>`}
+            ${stats.notHeard.length
+              ? html`<details class="tech-details">
+                  <summary>Músicas da playlist que não tocaram no período (${fmtNum(stats.notHeard.length)})</summary>
+                  <ol class="plain-list">${stats.notHeard.map((t) => html`<li value="${t.position}">${t.title} <span class="muted">— ${t.artists.join(', ')}</span></li>`)}</ol>
+                </details>`
+              : ''}`}
+    </section>`,
+  );
+}
+
 /* =============== Filtros =============== */
 
 function renderFilters(el, app) {
@@ -448,6 +527,7 @@ function renderFilters(el, app) {
     html`<details class="filters-details" open>
       <summary class="filters-summary"><span class="card-title">${icon('filter', 16)} Filtros <span class="badge" id="filter-count" hidden></span></span></summary>
       <div class="filters-body">
+        <label class="check playlist-check"><input type="checkbox" data-filter="playlistOnly" /> <span>Só músicas da playlist <strong>${PLAYLIST.name}</strong><span class="muted small"> — mostra quantas vezes saiu da ordem</span></span></label>
         <label class="field"><span class="field-label">Buscar</span><input type="search" data-filter="query" placeholder="artista, música ou álbum" /></label>
         <label class="field"><span class="field-label">Artista</span><input type="search" data-filter="artist" /></label>
         <label class="field"><span class="field-label">Música</span><input type="search" data-filter="track" /></label>
@@ -638,7 +718,7 @@ function renderResults(el, s, app) {
         </details>
       </div>
       ${rows.length
-        ? html`<div class="table-wrap">${group === 'none' ? scrobbleTable(slice, { tz, playCounts, durations: s.durations, anyDuration, offset: (page - 1) * pageSize }) : groupTable(slice, group, tz)}</div>
+        ? html`<div class="table-wrap">${group === 'none' ? scrobbleTable(slice, { tz, playCounts, durations: s.durations, anyDuration, offset: (page - 1) * pageSize, positions: s.filters.playlistOnly ? app.derived.playlist()?.positionById : null, highlight: s.view.highlight }) : groupTable(slice, group, tz)}</div>
             ${pagination(page, pages, pageSize, rows.length)}`
         : html`<div class="empty-inline">
             ${s.audit.scrobbles.length
@@ -648,10 +728,10 @@ function renderResults(el, s, app) {
   );
 }
 
-function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset }) {
+function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset, positions, highlight }) {
   return html`<table class="table">
     <thead><tr>
-      <th class="num">#</th><th>Data</th><th>Horário</th><th>Artista</th><th>Música</th><th>Álbum</th>
+      <th class="num">#</th><th>Data</th><th>Horário</th>${positions ? html`<th class="num" title="Posição da música na playlist">Nº na playlist</th>` : ''}<th>Artista</th><th>Música</th><th>Álbum</th>
       <th class="num" title="Quanto tempo depois do scrobble anterior">Desde o anterior</th>
       ${anyDuration ? html`<th class="num">Duração</th>` : ''}
       <th class="num" title="Quantas vezes esta música tocou no período">Vezes no período</th>
@@ -660,10 +740,11 @@ function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset })
       ${list.map((s, i) => {
         const short = s.gapPrev != null && s.gapPrev < AUDIT.shortGapSeconds;
         const ms = durations.get(trackKey(s));
-        return html`<tr data-row data-scrobble="${s.id}" tabindex="0">
+        return html`<tr data-row data-scrobble="${s.id}" tabindex="0" class="${s.id === highlight ? 'row-highlight' : ''}">
           <td class="num muted">${offset + i + 1}</td>
           <td class="nowrap">${formatDate(s.ts, tz)}</td>
           <td class="nowrap mono">${formatTime(s.ts, tz)}</td>
+          ${positions ? html`<td class="num"><span class="pl-pos">nº ${positions.get(s.id)}</span></td>` : ''}
           <td class="ellipsis" title="${s.artist}">${s.artist}</td>
           <td class="ellipsis strong cover-col" title="${s.track}">${withCover(s.image, s.track)}</td>
           <td class="ellipsis muted" title="${s.album}">${s.album || '—'}</td>

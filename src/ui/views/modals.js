@@ -6,6 +6,7 @@ import { AUDIT, APP, LASTFM, TIME_ZONE_LABEL } from '../../config.js';
 import { friendlyMessage } from '../../core/errors.js';
 import * as storage from '../../core/storage.js';
 import { listSources } from '../../sources/registry.js';
+import { describePlaylistEvent } from '../../core/playlist.js';
 import { formatDateTime, formatDate, formatTime, formatDuration, formatSpan, formatTrackLength, toIsoUtc, toIsoZoned, localParts } from '../../core/time.js';
 
 const WEEKDAYS_FULL = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -360,5 +361,49 @@ export function openRankingEntry(app, username) {
   on(m.el, 'click', '[data-act="open"]', () => {
     m.close();
     app.actions.openInAudit(e.username);
+  });
+}
+
+/* ---------- Uma saída da ordem da playlist ---------- */
+
+const PL_TITLE = { skip: 'Pulou músicas', back: 'Voltou para trás', repeat: 'Repetiu a mesma', outside: 'Tocou outra no meio' };
+
+export function openPlaylistEvent(app, eventId) {
+  const s = app.store.get();
+  const pl = app.derived.playlist();
+  const e = pl?.events.find((x) => x.id === eventId);
+  if (!e) return;
+  const tz = app.derived.timeZone();
+  // Contexto: um scrobble antes da música de onde saiu até um depois da música onde chegou.
+  const asc = [...s.audit.scrobbles].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
+  const i0 = asc.findIndex((x) => x.id === e.fromId);
+  const i1 = asc.findIndex((x) => x.id === e.scrobbleId);
+  const items = asc.slice(Math.max(0, i0 - 1), Math.min(asc.length, i1 + 2));
+  const m = openModal({
+    title: PL_TITLE[e.type],
+    subtitle: `${formatDateTime(e.ts, tz)} · ${TIME_ZONE_LABEL}`,
+    size: 'md',
+    body: html`<p>${describePlaylistEvent(e)}.</p>
+      ${e.expected && e.type !== 'outside' ? html`<p class="muted small">Pela ordem, a próxima seria nº ${e.expected.pos} “${e.expected.title}”.</p>` : ''}
+      <h3 class="section-title">O que tocou</h3>
+      <ol class="pl-context">
+        ${items.map((x) => {
+          const pos = pl.positionById.get(x.id);
+          const mark = x.id === e.fromId ? 'pl-ctx-from' : x.id === e.scrobbleId ? 'pl-ctx-to' : '';
+          return html`<li class="${mark}">
+            <button type="button" class="pl-ctx-row" data-id="${x.id}" title="Ver detalhes deste scrobble">
+              <span class="mono">${formatTime(x.ts, tz)}</span>
+              <span class="${pos ? 'pl-pos' : 'pl-out'}">${pos ? `nº ${pos}` : 'fora'}</span>
+              <span class="pl-ctx-name"><strong>${x.track}</strong> <span class="muted">— ${x.artist}</span></span>
+            </button>
+          </li>`;
+        })}
+      </ol>`,
+    footer: html`<span class="spacer"></span><button class="btn btn-primary" data-act="goto">${icon('search', 14)} Mostrar na lista</button>`,
+  });
+  on(m.el, 'click', '[data-id]', (_ev, b) => openScrobble(app, b.dataset.id));
+  on(m.el, 'click', '[data-act="goto"]', () => {
+    m.close();
+    app.actions.goToScrobble(e.scrobbleId);
   });
 }

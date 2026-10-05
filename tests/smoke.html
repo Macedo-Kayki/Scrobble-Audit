@@ -104,6 +104,40 @@
         await app.actions.importFile(new File([json], 'scrobble-audit_demo.json', { type: 'application/json' }));
         if (params.get('modal') === 'details') (await import('../src/ui/views/modals.js')).openAuditDetails(app);
       }
+      if (scenario === 'playlist') {
+        // Ouvinte fictício da playlist fixa, com saídas da ordem de propósito.
+        const { PLAYLIST } = await import('../src/data/playlist.js');
+        const T = PLAYLIST.tracks;
+        const out = [];
+        let t = now - 2 * 86400;
+        const play = (pos) => { const tr = T[pos - 1]; out.push(makeTrack((t += 160), tr.artists[0], tr.title, tr.album)); };
+        const other = (name) => out.push(makeTrack((t += 160), 'Outro Artista', name, 'Outro Álbum'));
+        // Sessão 1: na ordem até 10, pula 11–12, música de fora no meio, repete a 16, volta para a 5.
+        for (let p = 1; p <= 10; p++) play(p);
+        play(13); play(14); other('Música de Fora'); play(15); play(16); play(16); play(17); play(5); play(6); play(7);
+        // Sessão 2 (dia seguinte): playlist inteira, dando a volta, com uma interrupção.
+        t = now - 86400;
+        for (let p = 1; p <= 32; p++) { play(p); if (p === 20) { other('Propaganda'); other('Outra Qualquer'); } }
+        play(1); play(2); play(30);
+        fakes.ouvinte = new FakeLastfm(out);
+        app.actions.setForm({ username: 'ouvinte', start, end });
+        app.actions.setFilters({ playlistOnly: true });
+        await app.actions.startAudit();
+        if (params.get('event')) {
+          const ev = app.derived.playlist().events.find((e) => e.type === params.get('event'));
+          if (params.get('goto')) {
+            app.actions.goToScrobble(ev.scrobbleId);
+            await new Promise((r) => setTimeout(r, 500));
+            const row = document.querySelector('tr.row-highlight');
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'position:fixed;top:60px;right:16px;z-index:999;background:#fff;color:#000;padding:12px;border:2px solid #2a78d6;font:14px monospace';
+            pre.textContent = `linha destacada é a do evento: ${row?.dataset.scrobble === ev.scrobbleId}\npágina: ${app.store.get().view.page}\nlinha: ${row?.innerText.replace(/\s+/g, ' ').trim()}\nvisível na tela: ${row ? row.getBoundingClientRect().top < innerHeight && row.getBoundingClientRect().bottom > 0 : false}`;
+            document.body.appendChild(pre);
+            scrollTo(0, 0); // a ferramenta de captura não desenha a página rolada
+          }
+          else (await import('../src/ui/views/modals.js')).openPlaylistEvent(app, ev.id);
+        }
+      }
       if (scenario === 'refresh') {
         // Mesma pessoa na Auditoria e no ranking; chega um scrobble novo; "Atualizar" precisa enxergá-lo.
         app.actions.setForm({ username: 'demo', start, end });
