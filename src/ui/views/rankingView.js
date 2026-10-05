@@ -57,7 +57,7 @@ function bind(root, app) {
     else if (a === 'save-period') actions.saveRankingPeriod();
     else if (a === 'refresh-all') actions.refreshAllRanking();
     else if (a === 'cancel') actions.cancelRanking();
-    else if (a === 'refresh') actions.auditRankingUser(user);
+    else if (a === 'refresh') actions.auditRankingUser(user, { force: true });
     else if (a === 'details') modals.openRankingEntry(app, user);
     else if (a === 'open') actions.openInAudit(user);
     else if (a === 'export') {

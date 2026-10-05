@@ -385,7 +385,8 @@ export function createApp() {
       if (ok) await actions.auditRankingUser(s.audit.username);
     },
 
-    async auditRankingUser(username) {
+    /** `force`: busca de novo mesmo que a aba Auditoria já tenha esse usuário e período (botão Atualizar). */
+    async auditRankingUser(username, { force = false } = {}) {
       const name = String(username || '').trim();
       const r = store.get().ranking;
       if (!name || !r.range) return;
@@ -401,7 +402,7 @@ export function createApp() {
       const ctrl = rankingCtrl;
       store.set({ rankingJob: { username: name, progress: null, queue: [] } });
       try {
-        await auditForRanking(name, r.range, ctrl);
+        await auditForRanking(name, r.range, ctrl, { force });
       } finally {
         rankingCtrl = null;
         store.set({ rankingJob: null });
@@ -417,7 +418,7 @@ export function createApp() {
       try {
         for (let i = 0; i < names.length && !ctrl.signal.aborted; i++) {
           store.set({ rankingJob: { username: names[i], progress: null, index: i + 1, count: names.length } });
-          await auditForRanking(names[i], store.get().ranking.range, ctrl);
+          await auditForRanking(names[i], store.get().ranking.range, ctrl, { force: true });
         }
       } finally {
         rankingCtrl = null;
@@ -547,11 +548,12 @@ export function createApp() {
     return true;
   }
 
-  async function auditForRanking(name, range, ctrl) {
+  async function auditForRanking(name, range, ctrl, { force = false } = {}) {
+    const matchesMain = (st) => st.audit && same(st.audit.username, name) && rangeKey(st.audit.range) === rangeKey(range);
     try {
-      const s = store.get();
-      // Reaproveita a auditoria principal se for do mesmo usuário e intervalo.
-      let audit = s.audit && same(s.audit.username, name) && rangeKey(s.audit.range) === rangeKey(range) ? s.audit : null;
+      // Ao colocar alguém no ranking, reaproveita a auditoria da aba Auditoria (mesmo
+      // usuário e período). Ao atualizar (`force`), sempre busca de novo.
+      let audit = !force && matchesMain(store.get()) ? store.get().audit : null;
       if (!audit) {
         audit = await runAudit({
           source: derived.source(),
@@ -560,6 +562,9 @@ export function createApp() {
           signal: ctrl.signal,
           onProgress: throttle((p) => store.set((st) => ({ rankingJob: st.rankingJob && { ...st.rankingJob, progress: p } }))),
         });
+        // Mantém a aba Auditoria igual ao ranking quando é a mesma pessoa e o mesmo período.
+        const st = store.get();
+        if (matchesMain(st) && st.status !== 'running') store.set({ audit, auditPersisted: persistAudit(audit) });
       }
       upsertRankingEntry(summarize(audit));
       notifyVerification(audit);

@@ -96,6 +96,21 @@
         await app.actions.importFile(new File([json], 'scrobble-audit_demo.json', { type: 'application/json' }));
         if (params.get('modal') === 'details') (await import('../src/ui/views/modals.js')).openAuditDetails(app);
       }
+      if (scenario === 'refresh') {
+        // Mesma pessoa na Auditoria e no ranking; chega um scrobble novo; "Atualizar" precisa enxergá-lo.
+        app.actions.setForm({ username: 'demo', start, end });
+        await app.actions.startAudit();
+        await app.actions.addCurrentAuditToRanking();
+        const before = app.store.get().ranking.entries[0].total;
+        fakes.demo.data.push(makeTrack(now - 60, 'Artista Novo', 'Música Nova', ''));
+        await app.actions.auditRankingUser('demo', { force: true });
+        const st = app.store.get();
+        const pre = document.createElement('pre');
+        pre.id = 'refresh-result';
+        pre.style.cssText = 'position:fixed;top:60px;right:16px;z-index:999;background:#fff;color:#000;padding:12px;border:2px solid #2a78d6;font:14px monospace';
+        pre.textContent = `ranking antes: ${before}\nranking depois: ${st.ranking.entries[0].total}\naba Auditoria: ${st.audit.scrobbles.length}\ntem "Música Nova": ${st.audit.scrobbles.some((s) => s.track === 'Música Nova')}`;
+        document.body.appendChild(pre);
+      }
       if (scenario === 'ranking-new') {
         // Ranking do zero, sem passar pela aba Auditoria.
         app.actions.setView({ tab: 'ranking' });
