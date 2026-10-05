@@ -96,6 +96,14 @@
         await app.actions.importFile(new File([json], 'scrobble-audit_demo.json', { type: 'application/json' }));
         if (params.get('modal') === 'details') (await import('../src/ui/views/modals.js')).openAuditDetails(app);
       }
+      if (scenario === 'ranking-new') {
+        // Ranking do zero, sem passar pela aba Auditoria.
+        app.actions.setView({ tab: 'ranking' });
+        if (params.get('add')) {
+          app.actions.rankingPreset('last7d');
+          for (const name of params.get('add').split(',')) await app.actions.addRankingUser(name);
+        }
+      }
       if (scenario === 'ranking') {
         app.actions.setForm({ username: 'demo', start, end });
         await app.actions.startAudit();

@@ -1354,11 +1354,43 @@ input[type='time'] {
 }
 .ranking-add {
   display: flex;
-  gap: 8px;
-  max-width: 560px;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 640px;
 }
-.ranking-add .input-icon {
+.ranking-add-row {
+  display: flex;
+  gap: 8px;
+}
+.ranking-add-row .input-icon {
   flex: 1;
+}
+.ranking-period {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+  min-width: 0;
+}
+.ranking-period legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 0 4px;
+}
+.ranking-period-actions {
+  display: flex;
+  gap: 8px;
+}
+.ranking-range-line {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
 }
 .ranking-job {
   display: flex;
@@ -1869,7 +1901,7 @@ input[type='time'] {
   .row-2 {
     grid-template-columns: minmax(0, 1fr);
   }
-  .ranking-add {
+  .ranking-add-row {
     flex-direction: column;
   }
   .results-toolbar .segmented {

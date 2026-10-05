@@ -21,10 +21,12 @@ export function createApp() {
   const settings = { ...DEFAULT_SETTINGS, ...savedSettings };
   const tz = TIME_ZONE;
   const restored = restoreAudit();
+  const savedRanking = { range: null, entries: [], ...storage.load(storage.KEYS.ranking, {}) };
+  const savedForm = { username: '', ...defaultRangeInputs(tz), ...storage.load(storage.KEYS.form, {}) };
 
   const store = createStore({
     settings,
-    form: { username: '', ...defaultRangeInputs(tz), ...storage.load(storage.KEYS.form, {}) },
+    form: savedForm,
     history: storage.load(storage.KEYS.history, []),
     audit: restored.audit,
     auditPersisted: restored.audit ? true : null,
@@ -36,8 +38,11 @@ export function createApp() {
     view: { tab: 'audit', group: 'none', sort: 'time_desc', page: 1, ...storage.load(storage.KEYS.ui, {}) },
     durations: new Map(Object.entries(storage.load(storage.KEYS.durations, {}))),
     durationJob: null,
-    ranking: { range: null, entries: [], ...storage.load(storage.KEYS.ranking, {}) },
+    ranking: savedRanking,
     rankingJob: null,
+    // Campos da aba Ranking (período próprio + nome a adicionar). `rev` muda quando
+    // os campos são preenchidos por um botão (atalho, copiar), para a tela redesenhar.
+    rankingForm: { username: '', editing: false, rev: 0, ...(savedRanking.range ? rangeInputs(savedRanking.range) : { start: savedForm.start, end: savedForm.end }) },
   });
 
   let auditCtrl = null;
@@ -307,6 +312,46 @@ export function createApp() {
     },
 
     // ----- Ranking -----
+    setRankingForm(patch, { redraw = false } = {}) {
+      store.set((s) => ({ rankingForm: { ...s.rankingForm, ...patch, rev: s.rankingForm.rev + (redraw ? 1 : 0) } }));
+    },
+
+    rankingPreset(id) {
+      const range = presetRange(id, TIME_ZONE);
+      if (range) actions.setRankingForm(range, { redraw: true });
+    },
+
+    copyAuditPeriodToRanking() {
+      const f = store.get().form;
+      actions.setRankingForm({ start: f.start, end: f.end }, { redraw: true });
+    },
+
+    editRankingPeriod(editing) {
+      const r = store.get().ranking.range;
+      actions.setRankingForm({ editing, ...(r ? rangeInputs(r) : {}) }, { redraw: true });
+    },
+
+    /** Salva o período digitado na aba Ranking. */
+    async saveRankingPeriod() {
+      const ok = await applyRankingRange(rankingFormRange());
+      if (ok) actions.setRankingForm({ editing: false }, { redraw: true });
+      return ok;
+    },
+
+    /** Coloca um usuário no ranking; se ainda não há período, usa o digitado na aba Ranking. */
+    async addRankingUser(username) {
+      const name = String(username || '').trim();
+      if (!name) {
+        toast('Digite o nome de usuário da Last.fm.', 'warning');
+        return;
+      }
+      if (!store.get().ranking.range || store.get().rankingForm.editing) {
+        if (!(await actions.saveRankingPeriod())) return;
+      }
+      actions.setRankingForm({ username: '' }, { redraw: true });
+      await actions.auditRankingUser(name);
+    },
+
     async setRankingRangeFromForm() {
       const s = store.get();
       let range;
@@ -316,18 +361,7 @@ export function createApp() {
         toast(friendlyMessage(e), 'error');
         return false;
       }
-      const r = s.ranking;
-      if (r.range && rangeKey(r.range) === rangeKey(range)) return true;
-      if (r.entries.length) {
-        const ok = await confirmDialog({
-          title: 'Mudar o período do ranking',
-          message: 'Para a comparação ser justa, todos os usuários do ranking vão precisar ser auditados de novo no novo período. Continuar?',
-          confirmLabel: 'Mudar período',
-        });
-        if (!ok) return false;
-      }
-      store.set((st) => ({ ranking: { ...st.ranking, range } }));
-      return true;
+      return applyRankingRange(range);
     },
 
     /** Adiciona usando a auditoria atual (se o intervalo bater) ou audita no intervalo do ranking. */
@@ -335,7 +369,7 @@ export function createApp() {
       const s = store.get();
       if (!s.audit) return;
       if (!s.ranking.range) {
-        store.set((st) => ({ ranking: { ...st.ranking, range: { ...s.audit.range, warnings: [] } } }));
+        store.set((st) => ({ ranking: { ...st.ranking, range: { ...s.audit.range, warnings: [] } }, rankingForm: { ...st.rankingForm, ...rangeInputs(s.audit.range), editing: false, rev: st.rankingForm.rev + 1 } }));
       }
       const r = store.get().ranking;
       if (rangeKey(r.range) === rangeKey(s.audit.range)) {
@@ -400,7 +434,7 @@ export function createApp() {
     },
 
     clearRanking() {
-      store.set({ ranking: { range: null, entries: [] } });
+      store.set((st) => ({ ranking: { range: null, entries: [] }, rankingForm: { ...st.rankingForm, editing: false, rev: st.rankingForm.rev + 1 } }));
     },
 
     /** Carrega usuário + intervalo do ranking no formulário e audita. */
@@ -438,7 +472,7 @@ export function createApp() {
           const ok = await confirmDialog({ title: 'Importar ranking', message: `Trocar o ranking atual (${s.ranking.entries.length} usuário(s)) pelo ranking do arquivo?`, confirmLabel: 'Trocar' });
           if (!ok) return;
         }
-        store.set((st) => ({ ranking: result.ranking, view: { ...st.view, tab: 'ranking' } }));
+        store.set((st) => ({ ranking: result.ranking, rankingForm: { ...st.rankingForm, ...rangeInputs(result.ranking.range), editing: false, rev: st.rankingForm.rev + 1 }, view: { ...st.view, tab: 'ranking' } }));
         toast(`Ranking importado com ${fmtNum(result.ranking.entries.length)} usuário(s).`, 'success');
         result.warnings.forEach((w) => toast(w, 'warning', 8000));
         return;
@@ -484,6 +518,34 @@ export function createApp() {
       location.reload();
     },
   };
+
+  /** Período digitado na aba Ranking (ou null, com aviso, se estiver incompleto). */
+  function rankingFormRange() {
+    const s = store.get();
+    try {
+      return buildRange({ startInput: s.rankingForm.start, endInput: s.rankingForm.end, timeZone: TIME_ZONE, inclusiveEnd: s.settings.inclusiveEnd });
+    } catch (e) {
+      toast(friendlyMessage(e), 'error');
+      return null;
+    }
+  }
+
+  /** Define o período do ranking, pedindo confirmação se já houver usuários auditados em outro. */
+  async function applyRankingRange(range) {
+    if (!range) return false;
+    const r = store.get().ranking;
+    if (r.range && rangeKey(r.range) === rangeKey(range)) return true;
+    if (r.entries.length) {
+      const ok = await confirmDialog({
+        title: 'Mudar o período do ranking',
+        message: 'Para a comparação ser justa, todos os usuários do ranking vão precisar ser auditados de novo no novo período. Continuar?',
+        confirmLabel: 'Mudar período',
+      });
+      if (!ok) return false;
+    }
+    store.set((st) => ({ ranking: { ...st.ranking, range }, rankingForm: { ...st.rankingForm, ...rangeInputs(range) } }));
+    return true;
+  }
 
   async function auditForRanking(name, range, ctrl) {
     try {

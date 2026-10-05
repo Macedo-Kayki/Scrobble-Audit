@@ -1,11 +1,19 @@
 import { html, setHtml, on, icon, fmtNum } from '../dom.js';
 import { confirmDialog } from '../components/overlay.js';
-import { buildRange, rangeKey } from '../../core/audit.js';
+import { rangeKey } from '../../core/audit.js';
 import { formatDateTime, formatSpan } from '../../core/time.js';
 import { TIME_ZONE } from '../../config.js';
 import { rankingRows } from '../app.js';
 import * as modals from './modals.js';
 import { pickFile } from '../components/filePicker.js';
+
+const PRESETS = [
+  ['today', 'Hoje'],
+  ['yesterday', 'Ontem'],
+  ['last7d', 'Últimos 7 dias'],
+  ['thisMonth', 'Este mês'],
+  ['lastMonth', 'Mês passado'],
+];
 
 const PHASES = { user: 'procurando o usuário', probe: 'contando', fetch: 'buscando', verify: 'conferindo', reconcile: 'buscando o que faltou', done: 'finalizando' };
 const STATUS = {
@@ -19,7 +27,8 @@ export function mountRankingView(root, app) {
   const { store } = app;
   bind(root, app);
   const update = (s, p) => {
-    if (p && s.ranking === p.ranking && s.rankingJob === p.rankingJob && s.form === p.form && s.settings === p.settings && s.audit === p.audit) return;
+    const sameForm = p && s.rankingForm.rev === p.rankingForm.rev && s.rankingForm.editing === p.rankingForm.editing;
+    if (p && sameForm && s.ranking === p.ranking && s.rankingJob === p.rankingJob && s.settings === p.settings && s.audit === p.audit) return;
     render(root, s, app);
   };
   store.subscribe(update);
@@ -31,16 +40,21 @@ function bind(root, app) {
   root.addEventListener('submit', (e) => {
     if (e.target.id !== 'ranking-add') return;
     e.preventDefault();
-    const input = e.target.elements.username;
-    const name = input.value.trim();
-    if (!name) return;
-    input.value = '';
-    actions.auditRankingUser(name);
+    actions.addRankingUser(e.target.elements.username.value);
+  });
+  // Os campos guardam o que é digitado no estado, sem redesenhar a tela (não perde o foco).
+  root.addEventListener('input', (e) => {
+    const field = e.target.dataset?.rf;
+    if (field) actions.setRankingForm({ [field]: e.target.value });
   });
   on(root, 'click', '[data-action]', async (_e, b) => {
     const a = b.dataset.action;
     const user = b.dataset.user;
-    if (a === 'use-form-range') actions.setRankingRangeFromForm();
+    if (a === 'copy-audit-period') actions.copyAuditPeriodToRanking();
+    else if (a === 'preset') actions.rankingPreset(b.dataset.preset);
+    else if (a === 'edit-period') actions.editRankingPeriod(true);
+    else if (a === 'cancel-period') actions.editRankingPeriod(false);
+    else if (a === 'save-period') actions.saveRankingPeriod();
     else if (a === 'refresh-all') actions.refreshAllRanking();
     else if (a === 'cancel') actions.cancelRanking();
     else if (a === 'refresh') actions.auditRankingUser(user);
@@ -62,16 +76,11 @@ function render(root, s, app) {
   const r = s.ranking;
   const job = s.rankingJob;
   const { current, stale } = rankingRows(r);
-  let formRangeKey = null;
-  try {
-    formRangeKey = rangeKey(buildRange({ startInput: s.form.start, endInput: s.form.end, timeZone: TIME_ZONE, inclusiveEnd: s.settings.inclusiveEnd }));
-  } catch {
-    /* formulário incompleto */
-  }
-  const formDiffers = r.range && formRangeKey && formRangeKey !== rangeKey(r.range);
+  const rf = s.rankingForm;
   const canAddCurrent = s.audit && !r.entries.some((e) => e.username.toLowerCase() === s.audit.username.toLowerCase() && e.rangeKey === (r.range && rangeKey(r.range)));
   const dis = job ? 'disabled' : '';
   const end = r.range ? r.range.requestedTo ?? r.range.to : null;
+  const showEditor = !r.range || rf.editing;
 
   setHtml(
     root,
@@ -80,33 +89,56 @@ function render(root, s, app) {
           <h2 class="card-title">${icon('trophy', 18)} Ranking</h2>
           <p class="muted small">Compare quantos scrobbles cada pessoa fez no mesmo período.</p>
         </div>
-        ${r.range
-          ? html`<p class="ranking-range">${icon('clock', 14)} De <strong>${formatDateTime(r.range.from, TIME_ZONE)}</strong> até <strong>${formatDateTime(end, TIME_ZONE)}</strong> <span class="muted">(${formatSpan(end - r.range.from)})</span></p>`
-          : html`<p class="muted">Escolha o período na aba <strong>Auditoria</strong> e clique em “Usar o período da aba Auditoria”, ou coloque no ranking uma auditoria que você já fez.</p>`}
-        <div class="ranking-actions">
-          ${!r.range || formDiffers
-            ? html`<button class="btn btn-sm" data-action="use-form-range" ${dis}>${icon('clock', 14)} ${r.range ? 'Trocar pelo período da aba Auditoria' : 'Usar o período da aba Auditoria'}</button>`
-            : ''}
-          ${canAddCurrent ? html`<button class="btn btn-sm" data-action="add-current" ${dis}>${icon('plus', 14)} Colocar ${s.audit.username} (auditoria atual)</button>` : ''}
-          ${r.entries.length ? html`<button class="btn btn-sm" data-action="refresh-all" ${dis}>${icon('refresh', 14)} Atualizar todos</button>` : ''}
-          ${current.length
-            ? html`<details class="dropdown">
-                <summary class="btn btn-sm">${icon('download', 14)} Exportar</summary>
-                <div class="dropdown-menu">
-                  <button type="button" data-action="export" data-format="csv">Planilha (abre no Excel)</button>
-                  <button type="button" data-action="export" data-format="json">Arquivo para abrir aqui depois</button>
-                </div>
-              </details>`
-            : ''}
-          <button class="btn btn-sm" data-action="import" ${dis} title="Abrir um ranking que você exportou antes">${icon('upload', 14)} Importar</button>
-          ${r.range || r.entries.length ? html`<button class="btn btn-sm btn-ghost" data-action="clear" ${dis}>${icon('trash', 14)} Limpar</button>` : ''}
-        </div>
-        ${r.range
-          ? html`<form id="ranking-add" class="ranking-add">
-              <span class="input-icon">${icon('user', 16)}<input name="username" placeholder="nome de usuário da Last.fm" aria-label="Usuário para colocar no ranking" autocomplete="off" autocapitalize="off" spellcheck="false" list="user-history" ${dis} /></span>
-              <button class="btn btn-primary" type="submit" ${dis}>${icon('plus', 16)} Colocar no ranking</button>
-            </form>`
-          : ''}
+
+        ${showEditor
+          ? html`<fieldset class="ranking-period" ${dis}>
+              <legend>${r.range ? 'Mudar o período' : '1. Escolha o período'}</legend>
+              <div class="row-2">
+                <label class="field"><span class="field-label">De</span><input type="datetime-local" step="1" data-rf="start" value="${rf.start || ''}" /></label>
+                <label class="field"><span class="field-label">Até</span><input type="datetime-local" step="1" data-rf="end" value="${rf.end || ''}" /></label>
+              </div>
+              <div class="chips">
+                ${PRESETS.map(([id, label]) => html`<button type="button" class="chip" data-action="preset" data-preset="${id}">${label}</button>`)}
+                <button type="button" class="chip" data-action="copy-audit-period" title="Usar o mesmo período preenchido na aba Auditoria">Igual à aba Auditoria</button>
+              </div>
+              ${r.range
+                ? html`<div class="ranking-period-actions">
+                    <button type="button" class="btn btn-sm btn-primary" data-action="save-period">Salvar período</button>
+                    <button type="button" class="btn btn-sm btn-ghost" data-action="cancel-period">Cancelar</button>
+                  </div>`
+                : ''}
+            </fieldset>`
+          : html`<div class="ranking-range-line">
+              <p class="ranking-range">${icon('clock', 14)} De <strong>${formatDateTime(r.range.from, TIME_ZONE)}</strong> até <strong>${formatDateTime(end, TIME_ZONE)}</strong> <span class="muted">(${formatSpan(end - r.range.from)})</span></p>
+              <button type="button" class="btn btn-sm" data-action="edit-period" ${dis}>${icon('clock', 14)} Mudar período</button>
+            </div>`}
+
+        <form id="ranking-add" class="ranking-add">
+          ${!r.range ? html`<span class="field-label ranking-step">2. Digite quem você quer comparar</span>` : ''}
+          <div class="ranking-add-row">
+            <span class="input-icon">${icon('user', 16)}<input name="username" data-rf="username" value="${rf.username || ''}" placeholder="nome de usuário da Last.fm" aria-label="Usuário para colocar no ranking" autocomplete="off" autocapitalize="off" spellcheck="false" list="user-history" ${dis} /></span>
+            <button class="btn btn-primary" type="submit" ${dis}>${icon('plus', 16)} Colocar no ranking</button>
+          </div>
+        </form>
+
+        ${canAddCurrent || r.entries.length || current.length || r.range
+          ? html`<div class="ranking-actions">
+              ${canAddCurrent ? html`<button class="btn btn-sm" data-action="add-current" ${dis}>${icon('plus', 14)} Colocar ${s.audit.username} (auditoria atual)</button>` : ''}
+              ${r.entries.length ? html`<button class="btn btn-sm" data-action="refresh-all" ${dis}>${icon('refresh', 14)} Atualizar todos</button>` : ''}
+              ${current.length
+                ? html`<details class="dropdown">
+                    <summary class="btn btn-sm">${icon('download', 14)} Exportar</summary>
+                    <div class="dropdown-menu">
+                      <button type="button" data-action="export" data-format="csv">Planilha (abre no Excel)</button>
+                      <button type="button" data-action="export" data-format="json">Arquivo para abrir aqui depois</button>
+                    </div>
+                  </details>`
+                : ''}
+              <button class="btn btn-sm" data-action="import" ${dis} title="Abrir um ranking que você exportou antes">${icon('upload', 14)} Importar</button>
+              ${r.range || r.entries.length ? html`<button class="btn btn-sm btn-ghost" data-action="clear" ${dis}>${icon('trash', 14)} Limpar</button>` : ''}
+            </div>`
+          : html`<p class="muted small">Tem um ranking salvo? <button type="button" class="link-inline" data-action="import">Abra o arquivo</button>.</p>`}
+
         ${job
           ? html`<div class="ranking-job">
               <span class="spinner spinner-sm"></span>

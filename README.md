@@ -45,11 +45,10 @@ Todos os horários aparecem no **horário de Brasília**.
 
 ### Ranking
 
-1. Na aba **Auditoria**, escolha o período que quer comparar.
-2. Na aba **Ranking**, clique em **Usar o período da aba Auditoria**.
-3. Digite os nomes de usuário e clique em **Colocar no ranking**.
+1. Na aba **Ranking**, escolha o período em "De" e "Até", ou clique num atalho (*Hoje*, *Últimos 7 dias*…). O atalho **Igual à aba Auditoria** copia o período que você já preencheu lá.
+2. Digite um nome de usuário e clique em **Colocar no ranking**. Repita para cada pessoa.
 
-Todo mundo é comparado exatamente no mesmo período. Cada pessoa tem os botões **Ver** (abre a auditoria completa), **Atualizar** (busca de novo) e **Tirar** (remove do ranking).
+Todo mundo é comparado exatamente no mesmo período. Para trocar o período depois, clique em **Mudar período**. Cada pessoa tem os botões **Ver** (abre a auditoria completa), **Atualizar** (busca de novo) e **Tirar** (remove do ranking).
 
 ### Abrir um arquivo baixado
 
