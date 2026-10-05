@@ -12,6 +12,7 @@ export const KEYS = Object.freeze({
   history: 'history',
   lastAudit: 'lastAudit',
   ranking: 'ranking',
+  rankingFilter: 'rankingFilter',
   durations: 'durations',
   ui: 'ui',
 });

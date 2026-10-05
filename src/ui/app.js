@@ -9,6 +9,7 @@ import * as storage from '../core/storage.js';
 import { toCSV, auditToJSON, scrobbleToRecord, rankingToRecords, downloadFile, safeFilename } from '../core/export.js';
 import { parseImport, MAX_IMPORT_BYTES } from '../core/importer.js';
 import { getSource } from '../sources/registry.js';
+import { encodeCombos, EMPTY_RANKING_FILTER, hasRankingFilter, applyRankingFilter, describeRankingFilter } from '../core/rankingFilter.js';
 import { createStore, memo } from './store.js';
 import { confirmDialog, toast } from './components/overlay.js';
 import { fmtNum } from './dom.js';
@@ -42,6 +43,7 @@ export function createApp() {
     rankingJob: null,
     // Campos da aba Ranking (período próprio + nome a adicionar). `rev` muda quando
     // os campos são preenchidos por um botão (atalho, copiar), para a tela redesenhar.
+    rankingFilter: { ...EMPTY_RANKING_FILTER, ...storage.load(storage.KEYS.rankingFilter, {}) },
     rankingForm: { username: '', editing: false, rev: 0, ...(savedRanking.range ? rangeInputs(savedRanking.range) : { start: savedForm.start, end: savedForm.end }) },
   });
 
@@ -55,11 +57,12 @@ export function createApp() {
     ['form', storage.KEYS.form],
     ['filters', storage.KEYS.filters],
     ['history', storage.KEYS.history],
-    ['ranking', storage.KEYS.ranking],
+    ['rankingFilter', storage.KEYS.rankingFilter],
   ];
   let durationSaveTimer;
   store.subscribe((s, p) => {
     for (const [field, key] of persisted) if (s[field] !== p[field]) storage.save(key, s[field]);
+    if (s.ranking !== p.ranking) saveRanking(s.ranking);
     if (s.view !== p.view) storage.save(storage.KEYS.ui, { tab: s.view.tab, group: s.view.group, sort: s.view.sort });
     if (s.durations !== p.durations) {
       clearTimeout(durationSaveTimer);
@@ -298,10 +301,21 @@ export function createApp() {
       else downloadFile(`${name}.json`, JSON.stringify(records, null, 2), 'application/json');
     },
 
+    setRankingFilter(patch) {
+      store.set((s) => ({ rankingFilter: { ...s.rankingFilter, ...patch } }));
+    },
+
+    clearRankingFilter() {
+      store.set({ rankingFilter: { ...EMPTY_RANKING_FILTER } });
+    },
+
     exportRanking(format) {
-      const { ranking, settings: st } = store.get();
+      const { ranking, settings: st, rankingFilter } = store.get();
       if (!ranking.range) return;
-      const records = rankingToRecords(rankingRows(ranking).current, ranking);
+      const filter = hasRankingFilter(rankingFilter)
+        ? { label: describeRankingFilter(rankingFilter), totalOf: (e) => applyRankingFilter(e, rankingFilter)?.total ?? null }
+        : null;
+      const records = rankingToRecords(rankingRows(ranking).current, ranking, filter);
       const name = safeFilename('scrobble-audit-ranking', String(ranking.range.from), String(ranking.range.to));
       if (format === 'csv') downloadFile(`${name}.csv`, toCSV(records, { delimiter: st.csvDelimiter }), 'text/csv;charset=utf-8');
       else {
@@ -613,6 +627,8 @@ export function summarize(audit) {
     last: st.last,
     shortGaps: st.shortGaps,
     verification: { status: audit.verification.status, expected: audit.verification.expected, fetchedInWindow: audit.verification.fetchedInWindow },
+    // Contagens por artista + música + álbum, para o filtro do ranking.
+    combos: encodeCombos(audit.scrobbles),
     rangeKey: rangeKey(audit.range),
     auditedAt: audit.finishedAt,
   };
@@ -624,6 +640,21 @@ export function rankingRows(ranking) {
   const current = ranking.entries.filter((e) => e.rangeKey === key).sort((a, b) => b.total - a.total || a.username.localeCompare(b.username));
   const stale = ranking.entries.filter((e) => e.rangeKey !== key);
   return { current, stale };
+}
+
+let rankingSpaceWarned = false;
+/**
+ * Salva o ranking. Se não couber no navegador, salva sem as contagens do filtro
+ * (elas continuam valendo até recarregar a página; depois, "Atualizar" as refaz).
+ */
+function saveRanking(ranking) {
+  if (storage.save(storage.KEYS.ranking, ranking).ok) return;
+  const slim = { ...ranking, entries: ranking.entries.map(({ combos, ...e }) => e) };
+  storage.save(storage.KEYS.ranking, slim);
+  if (!rankingSpaceWarned) {
+    rankingSpaceWarned = true;
+    toast('O ranking ficou grande demais para guardar tudo neste navegador. O filtro funciona agora, mas depois de recarregar a página use “Atualizar” para filtrar de novo.', 'warning', 10000);
+  }
 }
 
 function pushHistory(history, audit) {

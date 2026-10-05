@@ -137,6 +137,10 @@
         pre.textContent = [`vw=${vw} scrollW=${document.documentElement.scrollWidth}`, ...lines].join('\n');
         document.body.prepend(pre);
       }
+      // Filtro do ranking: &rkartist=...&rktrack=...&rkalbum=...
+      if (params.get('rkartist') || params.get('rktrack') || params.get('rkalbum')) {
+        app.actions.setRankingFilter({ artist: params.get('rkartist') || '', track: params.get('rktrack') || '', album: params.get('rkalbum') || '' });
+      }
       document.title = 'SMOKE-DONE';
     </script>
   </body>

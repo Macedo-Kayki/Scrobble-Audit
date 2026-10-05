@@ -88,7 +88,8 @@ export function auditToJSON({ audit, scrobbles, filters, stats, timeZone, durati
   );
 }
 
-export function rankingToRecords(rows, ranking) {
+/** `filter` (opcional): { label, totalOf(entry) } — adiciona colunas com o resultado do filtro. */
+export function rankingToRecords(rows, ranking, filter = null) {
   return rows.map((r, i) => ({
     position: i + 1,
     username: r.username,
@@ -105,6 +106,7 @@ export function rankingToRecords(rows, ranking) {
     range_to_utc: toIsoUtc(ranking.range.to),
     timezone: ranking.range.timeZone,
     audited_at: r.auditedAt ? new Date(r.auditedAt).toISOString() : null,
+    ...(filter ? { filter: filter.label, filtered_scrobbles: filter.totalOf(r) } : {}),
   }));
 }
 

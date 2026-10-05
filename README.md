@@ -22,7 +22,7 @@ Quer saber o que tocou na sua conta entre 08:00 e 13:00 de um dia? Em que horár
 - **Descobrir todas as vezes que uma música tocou**: é só clicar nela.
 - **Filtrar** por artista, música, álbum, dia, horário do dia (inclusive de madrugada, como das 22:00 às 02:00), dia da semana e muito mais.
 - **Ver resumos e gráficos**: total de scrobbles, músicas e artistas mais ouvidos, horários e dias da semana em que mais se ouve música.
-- **Montar um ranking** e comparar quantos scrobbles cada pessoa fez **no mesmo período**.
+- **Montar um ranking** e comparar quantos scrobbles cada pessoa fez **no mesmo período**, inclusive de um artista, música ou álbum específico.
 - **Baixar os resultados** como planilha (abre no Excel) ou como arquivo para abrir no Scrobble Audit depois.
 - **Abrir de novo** uma auditoria ou um ranking que você baixou, sem buscar tudo outra vez, ou mandar o arquivo para outra pessoa abrir.
 
@@ -48,7 +48,9 @@ Todos os horários aparecem no **horário de Brasília**.
 1. Na aba **Ranking**, escolha o período em "De" e "Até", ou clique num atalho (*Hoje*, *Últimos 7 dias*…). O atalho **Igual à aba Auditoria** copia o período que você já preencheu lá.
 2. Digite um nome de usuário e clique em **Colocar no ranking**. Repita para cada pessoa.
 
-Todo mundo é comparado exatamente no mesmo período. Para trocar o período depois, clique em **Mudar período**. Cada pessoa tem os botões **Ver** (abre a auditoria completa), **Atualizar** (busca de novo) e **Tirar** (remove do ranking).
+Todo mundo é comparado exatamente no mesmo período. Para trocar o período depois, clique em **Mudar período**.
+
+**Filtrar o ranking:** em **Filtrar ranking**, digite um artista, uma música e/ou um álbum para ver quem mais ouviu aquilo no período. A lista se reorganiza pelo total filtrado, e o botão **Ver** abre a auditoria da pessoa já com o mesmo filtro. Pessoas colocadas no ranking antes dessa função existir aparecem com "Atualize para filtrar"; é só clicar em **Atualizar**. Cada pessoa tem os botões **Ver** (abre a auditoria completa), **Atualizar** (busca de novo) e **Tirar** (remove do ranking).
 
 ### Abrir um arquivo baixado
 
