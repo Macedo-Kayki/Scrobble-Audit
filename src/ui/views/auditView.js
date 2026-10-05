@@ -28,6 +28,19 @@ const PHASES = {
 };
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const LASTFM_PLACEHOLDER_IMAGE = '2a96cbd8b46e442fc41c2b86b821562f';
+
+/** Capa em miniatura; sem capa (ou se não carregar), mostra um ícone de nota musical. */
+function cover(url) {
+  return url && !url.includes(LASTFM_PLACEHOLDER_IMAGE)
+    ? html`<img class="thumb" src="${url}" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+    : html`<span class="thumb thumb-empty" aria-hidden="true">${icon('music', 16)}</span>`;
+}
+
+/** Nome com a capa à esquerda, mantendo as reticências quando o texto não cabe. */
+function withCover(url, name, cls = '') {
+  return html`<span class="name-cell">${cover(url)}<span class="name-text ${cls}">${name}</span></span>`;
+}
 
 export function mountAuditView(root, app) {
   const { store, derived } = app;
@@ -552,6 +565,19 @@ function bindResults(el, app) {
       actions.setView({ group: 'none' });
     }
   };
+  el.addEventListener(
+    'error',
+    (e) => {
+      const img = e.target;
+      if (img.tagName !== 'IMG' || !img.classList.contains('thumb')) return;
+      const empty = document.createElement('span');
+      empty.className = 'thumb thumb-empty';
+      empty.setAttribute('aria-hidden', 'true');
+      setHtml(empty, icon('music', 16));
+      img.replaceWith(empty);
+    },
+    true,
+  );
   on(el, 'click', 'tr[data-row]', (_e, row) => openRow(row));
   on(el, 'keydown', 'tr[data-row]', (e, row) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -639,7 +665,7 @@ function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset })
           <td class="nowrap">${formatDate(s.ts, tz)}</td>
           <td class="nowrap mono">${formatTime(s.ts, tz)}</td>
           <td class="ellipsis" title="${s.artist}">${s.artist}</td>
-          <td class="ellipsis strong" title="${s.track}">${s.track}</td>
+          <td class="ellipsis strong cover-col" title="${s.track}">${withCover(s.image, s.track)}</td>
           <td class="ellipsis muted" title="${s.album}">${s.album || '—'}</td>
           <td class="num nowrap ${short ? 'text-warning' : 'muted'}" ${short ? raw('title="Muito perto do scrobble anterior"') : ''}>${s.gapPrev == null ? '—' : formatDuration(s.gapPrev)}</td>
           ${anyDuration ? html`<td class="num muted">${formatTrackLength(ms)}</td>` : ''}
@@ -667,9 +693,9 @@ function groupTable(list, group, tz) {
               ? html`data-artist="${g.artist}"`
               : html`data-album="${g.album}" data-album-artist="${g.artist}"`;
         const cells = {
-          track: html`<td class="ellipsis strong" title="${g.track}">${g.track}</td><td class="ellipsis" title="${g.artist}">${g.artist}</td>`,
+          track: html`<td class="ellipsis strong cover-col" title="${g.track}">${withCover(g.image, g.track)}</td><td class="ellipsis" title="${g.artist}">${g.artist}</td>`,
           artist: html`<td class="ellipsis strong" title="${g.artist}">${g.artist}</td><td class="num">${fmtNum(new Set(g.items.map((s) => s.track.toLowerCase())).size)}</td>`,
-          album: html`<td class="ellipsis strong" title="${g.album}">${g.album}</td><td class="ellipsis" title="${g.artist}">${g.artist}</td>`,
+          album: html`<td class="ellipsis strong cover-col" title="${g.album}">${withCover(g.image, g.album)}</td><td class="ellipsis" title="${g.artist}">${g.artist}</td>`,
         }[group];
         return html`<tr data-row ${attrs} tabindex="0" title="${group === 'track' ? 'Ver todos os horários em que tocou' : 'Mostrar só este'}">
           <td class="num muted">${i + 1}</td>${cells}

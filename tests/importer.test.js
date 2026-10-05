@@ -12,7 +12,7 @@ const TO = FROM + 5 * 3600;
 
 const S = (ts, artist, track, album = '', extra = {}) => ({ id: `${ts}-${track}`, source: 'lastfm', ts, artist, track, album, artistMbid: '', trackMbid: '', albumMbid: '', url: '', image: '', ...extra });
 const scrobbles = annotateGaps([
-  S(FROM + 4000, 'Björk', 'Jóga', 'Homogenic', { url: 'https://www.last.fm/music/Bj%C3%B6rk/_/J%C3%B3ga' }),
+  S(FROM + 4000, 'Björk', 'Jóga', 'Homogenic', { url: 'https://www.last.fm/music/Bj%C3%B6rk/_/J%C3%B3ga', image: 'https://lastfm.freetls.fastly.net/i/u/64s/capa.jpg' }),
   S(FROM + 3000, 'Sepultura', '=Roots, Bloody "Roots"', 'Roots'), // vírgula, aspas e prefixo de fórmula
   S(FROM + 3000, 'Sepultura', '=Roots, Bloody "Roots"', 'Roots'), // duplicata legítima (mesmo segundo)
   S(FROM + 10, 'Radiohead', 'Karma Police', 'OK Computer', { trackMbid: 'abc-123' }),
@@ -31,7 +31,7 @@ const audit = {
 const durations = new Map([['radiohead\u0001karma police', 263000]]);
 const opts = { fileName: 'x', fallbackTimeZone: 'UTC' };
 
-const comparable = (list) => list.map(({ ts, artist, track, album, trackMbid, url }) => ({ ts, artist, track, album, trackMbid, url }));
+const comparable = (list) => list.map(({ ts, artist, track, album, trackMbid, url, image }) => ({ ts, artist, track, album, trackMbid, url, image }));
 
 test('JSON de auditoria: ida e volta sem perdas', () => {
   const json = auditToJSON({ audit, scrobbles, filters: {}, stats: computeStats(scrobbles, { timeZone: TZ }), timeZone: TZ, durations, scope: 'all' });

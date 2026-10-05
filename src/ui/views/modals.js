@@ -40,7 +40,7 @@ export function openScrobble(app, id) {
     subtitle: `${sc.artist}${sc.album ? ` — ${sc.album}` : ''}`,
     size: 'md',
     body: html`<div class="detail-head">
-        ${sc.image ? html`<img class="cover" src="${sc.image}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ''}
+        ${sc.image && !sc.image.includes('2a96cbd8b46e442fc41c2b86b821562f') ? html`<img class="cover" src="${sc.image}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ''}
         <div>
           <div class="detail-time mono">${formatTime(sc.ts, tz)}</div>
           <div class="muted">${WEEKDAYS_FULL[p.weekday]}, ${formatDate(sc.ts, tz)} · ${TIME_ZONE_LABEL}</div>

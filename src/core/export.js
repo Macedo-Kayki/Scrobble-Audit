@@ -26,6 +26,7 @@ export function scrobbleToRecord(s, { timeZone, username, durations }) {
     duration_ms: ms ?? null,
     seconds_since_previous: s.gapPrev ?? null,
     url: s.url || null,
+    image_url: s.image || null,
   };
 }
 

@@ -1319,6 +1319,38 @@ input[type='time'] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.table .cover-col {
+  max-width: 320px;
+}
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thumb {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--surface-3);
+}
+.thumb-empty {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.table td.cover-col {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
 .actions-col {
   text-align: right;
   width: 1%;

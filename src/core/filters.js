@@ -197,11 +197,12 @@ export function groupScrobbles(list, mode) {
     if (!k) continue; // sem álbum informado não entra no agrupamento por álbum
     let g = groups.get(k);
     if (!g) {
-      g = { key: k, artist: s.artist, track: mode === 'track' ? s.track : '', album: mode === 'album' ? s.album : '', count: 0, firstTs: s.ts, lastTs: s.ts, items: [] };
+      g = { key: k, artist: s.artist, track: mode === 'track' ? s.track : '', album: mode === 'album' ? s.album : '', image: '', count: 0, firstTs: s.ts, lastTs: s.ts, items: [] };
       groups.set(k, g);
     }
     g.count++;
     g.items.push(s);
+    if (!g.image && s.image) g.image = s.image;
     if (s.ts < g.firstTs) g.firstTs = s.ts;
     if (s.ts > g.lastTs) g.lastTs = s.ts;
   }

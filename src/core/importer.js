@@ -238,7 +238,7 @@ function recordToScrobble(r) {
     trackMbid: str(r.track_mbid),
     albumMbid: str(r.album_mbid),
     url: str(r.url),
-    image: '',
+    image: str(r.image_url),
   };
 }
 

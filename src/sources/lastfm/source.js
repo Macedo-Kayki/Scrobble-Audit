@@ -293,12 +293,15 @@ function text(v) {
   return String(v['#text'] ?? v.name ?? '');
 }
 
+/** Imagem genérica (estrela) que a Last.fm envia quando não há capa: tratada como "sem imagem". */
+export const LASTFM_PLACEHOLDER_IMAGE = '2a96cbd8b46e442fc41c2b86b821562f';
+
 function pickImage(images) {
   if (!Array.isArray(images)) return '';
   const byPref = ['medium', 'large', 'small', 'extralarge'];
   for (const size of byPref) {
     const img = images.find((i) => i.size === size && i['#text']);
-    if (img) return img['#text'];
+    if (img) return img['#text'].includes(LASTFM_PLACEHOLDER_IMAGE) ? '' : img['#text'];
   }
   return '';
 }

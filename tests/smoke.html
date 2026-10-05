@@ -46,6 +46,14 @@
         if (method === 'user.getrecenttracks') {
           const limit = Number(u.searchParams.get('limit') || 50);
           const r = await fake.getRecentTracks({ from: Number(u.searchParams.get('from')), to: Number(u.searchParams.get('to')), page: Number(u.searchParams.get('page') || 1), limit });
+          const hue = (t) => (t.length * 47) % 360;
+          for (const t of r.tracks) {
+            const name = t.artist?.['#text'] || '';
+            if (/[02468]$/.test(name)) {
+              const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='hsl(${hue(name)},55%,55%)'/><circle cx='32' cy='32' r='14' fill='rgba(255,255,255,.55)'/></svg>`;
+              t.image = [{ size: 'medium', '#text': 'data:image/svg+xml,' + encodeURIComponent(svg) }];
+            }
+          }
           return json({ recenttracks: { track: r.tracks, '@attr': { user, total: String(r.total), totalPages: String(r.totalPages), page: String(r.page), perPage: String(limit) } } });
         }
         if (method === 'track.getinfo') {
@@ -140,6 +148,12 @@
       // Filtro do ranking: &rkartist=...&rktrack=...&rkalbum=...
       if (params.get('rkartist') || params.get('rktrack') || params.get('rkalbum')) {
         app.actions.setRankingFilter({ artist: params.get('rkartist') || '', track: params.get('rktrack') || '', album: params.get('rkalbum') || '' });
+      }
+      // &only=results: esconde formulário, resumo e gráficos para capturar só a lista.
+      if (params.get('only') === 'results') {
+        const st = document.createElement('style');
+        st.textContent = '#audit-form,#audit-summary,#audit-charts,#onboarding{display:none!important}';
+        document.head.appendChild(st);
       }
       document.title = 'SMOKE-DONE';
     </script>

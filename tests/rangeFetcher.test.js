@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { RangeFetcher } from '../src/sources/lastfm/source.js';
+import { RangeFetcher, normalizeTrack } from '../src/sources/lastfm/source.js';
 import { FakeLastfm, generate, makeTrack, multiset } from './fakeLastfm.js';
 
 const noSleep = async () => {};
@@ -120,4 +120,13 @@ test('página vazia esporádica é retentada', async () => {
 
 test('intervalo inválido é rejeitado', () => {
   assert.throws(() => new RangeFetcher({ client: {}, user: 'u', from: TO, to: FROM }));
+});
+
+test('capa: usa a imagem média e ignora a estrela genérica da Last.fm', () => {
+  const base = { name: 'T', artist: { '#text': 'A' }, album: { '#text': 'B' }, date: { uts: '100' } };
+  const real = normalizeTrack({ ...base, image: [{ size: 'small', '#text': 'https://x/34s/capa.jpg' }, { size: 'medium', '#text': 'https://x/64s/capa.jpg' }] });
+  assert.equal(real.image, 'https://x/64s/capa.jpg');
+  const star = normalizeTrack({ ...base, image: [{ size: 'medium', '#text': 'https://x/64s/2a96cbd8b46e442fc41c2b86b821562f.png' }] });
+  assert.equal(star.image, '');
+  assert.equal(normalizeTrack(base).image, '');
 });
