@@ -77,3 +77,37 @@ test('a playlist embutida tem as 32 músicas do arquivo, sem dados pessoais', ()
   const idx = buildPlaylistIndex(PLAYLIST);
   assert.equal(idx.byTitle.get('interludio').length, 2);
 });
+
+/* ---------- Mudança de ordem em 02/10/2026 10:00 (horário de Brasília) ---------- */
+
+const CHANGE = Math.floor(Date.parse('2026-10-02T10:00:00-03:00') / 1000);
+const real = (pos, ts) => {
+  const t = PLAYLIST.tracks[pos - 1];
+  return { id: `r${pos}-${ts}`, ts, track: t.title, artist: t.artists[0], album: t.album };
+};
+
+test('antes da mudança: "VC NÃO PARECE MAIS A MESMA" era a última', () => {
+  const t0 = CHANGE - 4 * 3600;
+  // 17 → 18 → 20 → 21 … 32 → 19 → 1 (a ordem antiga, sem a 19 no meio)
+  const seq = [17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 19, 1];
+  const r = analyzePlaylist(seq.map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
+  assert.equal(r.counts.total, 0, 'seguiu a ordem antiga');
+  assert.equal(r.positionById.get(`r19-${t0 + 15 * 150}`), 32, 'era a nº 32');
+  assert.equal(r.positionById.get(`r20-${t0 + 2 * 150}`), 19, 'a NÃO FAZEMOS POP era a nº 19');
+  assert.equal(r.changes.length, 1);
+});
+
+test('depois da mudança: vale a ordem atual', () => {
+  const t0 = CHANGE + 3600;
+  const inOrder = analyzePlaylist([18, 19, 20].map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
+  assert.equal(inOrder.counts.total, 0);
+  assert.equal(inOrder.positionById.get(`r19-${t0 + 150}`), 19);
+  const oldOrder = analyzePlaylist([18, 20].map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
+  assert.equal(oldOrder.counts.skip, 1, 'pular a 19 agora é sair da ordem');
+  assert.equal(oldOrder.events[0].expected.title, PLAYLIST.tracks[18].title);
+});
+
+test('o instante da mudança vale para a ordem nova', () => {
+  const r = analyzePlaylist([real(18, CHANGE - 150), real(19, CHANGE)], PLAYLIST);
+  assert.equal(r.counts.total, 0, '18 → 19 às 10:00 já está na ordem nova');
+});

@@ -12,6 +12,8 @@ import { normalizeText } from './filters.js';
  * posição esperada na sequência e, depois, pelo álbum.
  *
  * ORDEM (scrobbles do mais antigo para o mais recente)
+ * - A ordem pode mudar com o tempo (`versions` em src/data/playlist.js): cada
+ *   passagem é avaliada na ordem que valia no momento da música que chegou.
  * - Sessão: mais de `sessionGapSec` sem scrobbles começa uma sessão nova;
  *   parar de ouvir não conta como sair da ordem.
  * - Entre duas músicas da playlist na mesma sessão (posições p → q):
@@ -60,22 +62,55 @@ export function candidatePositions(scrobble, index) {
   return list.filter((t) => t.artistKeys.some((a) => a && (artist.includes(a) || a.includes(artist))));
 }
 
-function resolvePosition(scrobble, candidates, expected) {
+/** Escolhe a faixa (número atual) entre candidatas de mesmo título: a esperada, depois pelo álbum. */
+function resolveTrack(scrobble, candidates, expectedTrack) {
   if (candidates.length === 1) return candidates[0].position;
-  if (expected && candidates.some((c) => c.position === expected)) return expected;
+  if (expectedTrack && candidates.some((c) => c.position === expectedTrack)) return expectedTrack;
   const album = normalizeName(scrobble.album);
   const byAlbum = album && candidates.find((c) => c.albumKey === album);
   return (byAlbum || candidates[0]).position;
 }
 
 /**
- * Analisa a ordem da playlist nos scrobbles.
+ * Versões da ordem da playlist no tempo. Cada uma lista as faixas (pelo número
+ * atual) na ordem que valia a partir de `from`. Sem `versions`, vale a ordem atual.
+ */
+export function buildVersions(playlist) {
+  const raw = playlist.versions?.length ? playlist.versions : [{ from: null, order: playlist.tracks.map((t) => t.position) }];
+  return raw
+    .map((v) => ({
+      fromTs: v.from ? Math.floor(Date.parse(v.from) / 1000) : -Infinity,
+      from: v.from || null,
+      note: v.note || '',
+      order: v.order,
+      posOf: new Map(v.order.map((track, i) => [track, i + 1])),
+    }))
+    .sort((a, b) => a.fromTs - b.fromTs);
+}
+
+function versionAt(versions, ts) {
+  let v = versions[0];
+  for (const x of versions) if (x.fromTs <= ts) v = x;
+  return v;
+}
+
+/** Próxima faixa depois de `track` na versão (a última volta para a primeira). */
+function nextTrack(version, track) {
+  const pos = version.posOf.get(track);
+  if (!pos) return null;
+  return version.order[pos % version.order.length];
+}
+
+/**
+ * Analisa a ordem da playlist nos scrobbles, usando a ordem que valia no
+ * momento de cada scrobble (veja `versions` em src/data/playlist.js).
  * @param {import('./model.js').Scrobble[]} scrobbles qualquer ordem
- * @returns {{ positionById: Map<string, number>, events: object[], counts: Record<string, number>, stats: object }}
+ * @returns {{ positionById: Map<string, number>, events: object[], counts: Record<string, number>, stats: object, changes: object[] }}
+ *   positionById: posição do scrobble na ordem que valia naquele momento.
  */
 export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_GAP_SEC } = {}) {
   const index = buildPlaylistIndex(playlist);
-  const N = index.size;
+  const versions = buildVersions(playlist);
   const asc = [...scrobbles].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
   const positionById = new Map();
   const events = [];
@@ -85,7 +120,7 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
   let inOrder = 0;
   let sessions = 0;
 
-  let prev = null; // último scrobble da playlist na sessão atual: { s, pos }
+  let prev = null; // última faixa da playlist na sessão atual: { s, track }
   let outsideRun = []; // músicas de fora desde `prev`
   let lastTs = null;
   let sessionHasPlaylist = false;
@@ -98,35 +133,43 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
     }
     lastTs = s.ts;
 
-    const cands = candidatePositions(s, index);
+    const v = versionAt(versions, s.ts);
+    const cands = candidatePositions(s, index).filter((c) => v.posOf.has(c.position));
     if (!cands.length) {
       if (prev) outsideRun.push(s);
       continue;
     }
-    const expected = prev ? (prev.pos === N ? 1 : prev.pos + 1) : null;
-    const pos = resolvePosition(s, cands, expected);
+    const expectedTrack = prev ? nextTrack(v, prev.track) : null;
+    const track = resolveTrack(s, cands, expectedTrack);
+    const pos = v.posOf.get(track);
     positionById.set(s.id, pos);
-    heard.add(pos);
+    heard.add(track);
     if (!sessionHasPlaylist) {
       sessions++;
       sessionHasPlaylist = true;
     }
 
-    if (prev) {
+    // A passagem é avaliada na ordem que valia no momento da música que chegou.
+    const prevPos = prev ? v.posOf.get(prev.track) : null;
+    if (prev && prevPos) {
+      const N = v.order.length;
+      const ctx = { v, index };
+      const from = { s: prev.s, track: prev.track, pos: prevPos };
+      const to = { s, track, pos };
       if (outsideRun.length) {
         counts.outside++;
-        events.push(makeEvent('outside', prev, { s, pos }, expected, index, { outside: outsideRun }));
+        events.push(makeEvent('outside', from, to, expectedTrack, ctx, { outside: outsideRun }));
       }
       transitions++;
-      if (pos === expected) inOrder++;
+      if (track === expectedTrack) inOrder++;
       else {
-        const type = pos === prev.pos ? 'repeat' : prev.pos === N || pos > prev.pos ? 'skip' : 'back';
+        const type = track === prev.track ? 'repeat' : prevPos === N || pos > prevPos ? 'skip' : 'back';
         counts[type]++;
-        const skipped = type === 'skip' ? (prev.pos === N ? pos - 1 : pos - prev.pos - 1) : 0;
-        events.push(makeEvent(type, prev, { s, pos }, expected, index, { skipped }));
+        const skipped = type === 'skip' ? (prevPos === N ? pos - 1 : pos - prevPos - 1) : 0;
+        events.push(makeEvent(type, from, to, expectedTrack, ctx, { skipped }));
       }
     }
-    prev = { s, pos };
+    prev = { s, track };
     outsideRun = [];
   }
 
@@ -143,6 +186,8 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
       inOrder,
       notHeard: index.tracks.filter((t) => !heard.has(t.position)),
     },
+    // Mudanças de ordem registradas (para avisar na tela).
+    changes: versions.filter((v) => v.from).map((v) => ({ fromTs: v.fromTs, note: v.note })),
   };
 }
 
@@ -155,17 +200,17 @@ export function describePlaylistEvent(e) {
   return `Tocou ${e.outside.length} música${e.outside.length === 1 ? '' : 's'} de fora da playlist entre ${t(e.from)} e ${t(e.to)}`;
 }
 
-function makeEvent(type, from, to, expected, index, extra) {
-  const track = (pos) => index.tracks[pos - 1];
+function makeEvent(type, from, to, expectedTrack, { v, index }, extra) {
+  const title = (track) => index.tracks[track - 1].title;
   return {
     type,
     id: `${type}:${to.s.id}`,
     ts: to.s.ts,
     scrobbleId: to.s.id,
     fromId: from.s.id,
-    from: { pos: from.pos, title: track(from.pos).title },
-    to: { pos: to.pos, title: track(to.pos).title },
-    expected: expected ? { pos: expected, title: track(expected).title } : null,
+    from: { pos: from.pos, title: title(from.track) },
+    to: { pos: to.pos, title: title(to.track) },
+    expected: expectedTrack ? { pos: v.posOf.get(expectedTrack), title: title(expectedTrack) } : null,
     skipped: extra.skipped || 0,
     outside: (extra.outside || []).map((o) => ({ id: o.id, ts: o.ts, artist: o.artist, track: o.track })),
   };

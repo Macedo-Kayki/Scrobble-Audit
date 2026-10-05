@@ -1677,6 +1677,20 @@ input[type='time'] {
 .playlist-card .tile-sub {
   white-space: normal;
 }
+.pl-change {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.pl-change .icon {
+  margin-top: 2px;
+  color: var(--accent-text);
+}
 .playlist-head {
   display: flex;
   align-items: baseline;

@@ -483,6 +483,9 @@ function renderPlaylist(el, s, app) {
         <span class="muted small">${PLAYLIST.tracks.length} músicas · analisando todo o período auditado · uma pausa de mais de 30 minutos começa uma nova sessão</span>
         <button type="button" class="btn btn-sm btn-ghost" data-action="pl-off">${icon('x', 14)} Tirar filtro</button>
       </div>
+      ${pl.changes.map(
+        (c) => html`<p class="pl-change small">${icon('info', 14)} <span><strong>A ordem mudou em ${formatDateTime(c.fromTs, tz, { seconds: false })}:</strong> ${c.note} Cada passagem é comparada com a ordem que valia naquele momento.</span></p>`,
+      )}
       ${!stats.playlistScrobbles
         ? html`<p class="muted">Nenhuma música desta playlist foi ouvida nesse período.</p>`
         : html`<div class="tiles tiles-compact">

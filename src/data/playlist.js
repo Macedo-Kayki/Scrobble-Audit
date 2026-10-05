@@ -389,4 +389,18 @@ export const PLAYLIST = Object.freeze({
       "spotifyUri": "spotify:track:7jp61MVBu85XlnnpybInqz"
     }
   ],
+  // Ordem da playlist ao longo do tempo. `tracks` acima está na ordem ATUAL; cada versão
+  // lista as músicas pelo número atual (position) na ordem que valia a partir de `from`
+  // (horário de Brasília), até a próxima versão. A análise usa a versão de cada momento.
+  versions: [
+    {
+      from: null,
+      order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 19],
+    },
+    {
+      from: '2026-10-02T10:00:00-03:00',
+      note: '“VC NÃO PARECE MAIS A MESMA” saiu do fim da playlist (nº 32) para o nº 19.',
+      order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
+    },
+  ],
 });

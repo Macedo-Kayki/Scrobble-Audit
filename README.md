@@ -56,6 +56,8 @@ O site conhece a playlist **NIINK DINÂMICA** (32 músicas) e reconhece essas m�
    - **Tocou outra no meio:** uma música de fora da playlist entre duas da playlist.
 4. Clique em **Ver** em qualquer caso para ver o que tocou antes e depois. Depois, **Mostrar na lista** leva até aquele scrobble na lista, destacado.
 
+A ordem da playlist mudou uma vez: até **02/10/2026 às 10:00**, “VC NÃO PARECE MAIS A MESMA” era a última (nº 32); depois disso, passou a ser a nº 19. O site compara cada passagem com a ordem que valia naquele momento. Novas mudanças podem ser registradas em `versions`, no arquivo da playlist.
+
 Depois da última música, voltar para a primeira conta como na ordem. Uma pausa de mais de 30 minutos começa uma nova sessão, então parar de ouvir não conta como sair da ordem. A lista da playlist fica em [`src/data/playlist.js`](src/data/playlist.js).
 
 ### Ranking
