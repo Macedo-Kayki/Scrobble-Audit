@@ -392,7 +392,10 @@ export const PLAYLIST = Object.freeze({
   // Passagens que também contam como "na ordem", além de seguir para a próxima
   // (e de voltar da última para a primeira). Usam o número da posição na ordem
   // que valia no momento.
-  alsoInOrder: [{ from: 31, to: 1, note: 'Voltar da nº 31 para a nº 1 é normal e conta como na ordem.' }],
+  alsoInOrder: [
+    { from: 31, to: 1, note: 'Voltar da nº 31 para a nº 1 é normal e conta como na ordem.' },
+    { from: 32, to: 19, note: 'Ir da nº 32 “Interlúdio” para a nº 19 “VC NÃO PARECE MAIS A MESMA” não conta como pulo.' },
+  ],
   // Sair destas músicas (pelo número atual) para qualquer outra não conta como
   // "pulou" nem "voltou".
   noSkipFrom: [{ track: 19, note: 'Sair da nº 19 “VC NÃO PARECE MAIS A MESMA” para qualquer outra música não conta como pulo.' }],

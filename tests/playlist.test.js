@@ -115,3 +115,11 @@ test('voltar da nº 31 para a nº 1 é normal; da nº 30 para a nº 1, não', ()
   const r2 = analyzePlaylist(seq([29, 30, 1]), PLAYLIST);
   assert.equal(r2.counts.back, 1);
 });
+
+test('ir do Interlúdio nº 32 para a nº 19 não conta; do INTERLÚDIO nº 12 para a nº 19, conta', () => {
+  const r1 = analyzePlaylist(seq([31, 32, 19]), PLAYLIST);
+  assert.equal(r1.counts.total, 0);
+  assert.equal(r1.positionById.get(`r32-${T0R + 150}`), 32, 'reconheceu o Interlúdio do fim');
+  const r2 = analyzePlaylist(seq([11, 12, 19]), PLAYLIST);
+  assert.equal(r2.counts.skip, 1);
+});
