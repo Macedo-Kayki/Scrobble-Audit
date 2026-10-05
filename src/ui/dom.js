@@ -63,6 +63,20 @@ const nf = new Intl.NumberFormat('pt-BR');
 export const fmtNum = (n) => (n == null || !Number.isFinite(n) ? '—' : nf.format(n));
 export const fmtDec = (n, d = 1) => (n == null || !Number.isFinite(n) ? '—' : n.toLocaleString('pt-BR', { maximumFractionDigits: d, minimumFractionDigits: d }));
 
+/**
+ * Porcentagem honesta: só mostra 100% (ou 0%) quando é exatamente isso.
+ * Nos outros casos usa uma casa decimal arredondada para baixo — 2.358 de 2.363
+ * vira "99,7%", nunca "100%".
+ */
+export function fmtPercent(part, total) {
+  if (!total) return '—';
+  if (part >= total) return '100%';
+  if (part <= 0) return '0%';
+  const v = Math.floor((part / total) * 1000) / 10;
+  if (v < 0.1) return 'menos de 0,1%';
+  return `${v.toLocaleString('pt-BR', { minimumFractionDigits: v % 1 ? 1 : 0, maximumFractionDigits: 1 })}%`;
+}
+
 /** Ícones SVG inline (traço), para não depender de fontes de ícones. */
 const ICONS = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',

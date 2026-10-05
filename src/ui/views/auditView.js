@@ -1,4 +1,4 @@
-import { html, raw, setHtml, $, $$, on, debounce, icon, fmtNum, fmtDec } from '../dom.js';
+import { html, raw, setHtml, $, $$, on, debounce, icon, fmtNum, fmtDec, fmtPercent } from '../dom.js';
 import { buildRange } from '../../core/audit.js';
 import { activeFilterCount, GROUP_MODES, SORT_OPTIONS } from '../../core/filters.js';
 import { trackKey } from '../../core/model.js';
@@ -475,7 +475,6 @@ function renderPlaylist(el, s, app) {
   const type = s.view.plType || 'all';
   const limit = s.view.plLimit || 30;
   const events = type === 'all' ? pl.events : pl.events.filter((e) => e.type === type);
-  const pct = stats.transitions ? Math.round((stats.inOrder / stats.transitions) * 100) : null;
   setHtml(
     el,
     html`<section class="card playlist-card">
@@ -488,7 +487,7 @@ function renderPlaylist(el, s, app) {
         ? html`<p class="muted">Nenhuma música desta playlist foi ouvida nesse período.</p>`
         : html`<div class="tiles tiles-compact">
               ${tile('Saiu da ordem', fmtNum(counts.total), `vez(es), em ${fmtNum(stats.transitions)} passagens de uma música para outra`, null, counts.total ? 'tile-flag' : '')}
-              ${tile('Seguiu a ordem', pct == null ? '—' : `${pct}%`, `${fmtNum(stats.inOrder)} de ${fmtNum(stats.transitions)} passagens`)}
+              ${tile('Seguiu a ordem', fmtPercent(stats.inOrder, stats.transitions), `${fmtNum(stats.inOrder)} de ${fmtNum(stats.transitions)} passagens`)}
               ${tile('Músicas da playlist ouvidas', fmtNum(stats.playlistScrobbles), `em ${fmtNum(stats.sessions)} sessão(ões)`)}
               ${tile('Não tocaram no período', fmtNum(stats.notHeard.length), `de ${PLAYLIST.tracks.length} músicas da playlist`)}
             </div>

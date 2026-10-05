@@ -9,6 +9,7 @@ import { encodeScrobbles, decodeScrobbles } from '../src/core/storage.js';
 import { ScrobbleCollector, annotateGaps } from '../src/core/model.js';
 import { LastfmClient, mapApiError } from '../src/sources/lastfm/client.js';
 import { RateLimiter } from '../src/core/rateLimiter.js';
+import { fmtPercent } from '../src/ui/dom.js';
 
 const SP = 'America/Sao_Paulo';
 
@@ -152,4 +153,14 @@ test('cliente: mapeia erros e retenta rate limit / 5xx', async () => {
 
   const c2 = new LastfmClient({ apiKey: 'k', limiter, sleep: async () => {}, fetchImpl: async () => ({ status: 200, ok: true, json: async () => ({ error: 6, message: 'User not found' }) }) });
   await assert.rejects(c2.getUserInfo('nobody'), (e) => e.kind === 'user_not_found');
+});
+
+test('porcentagem nunca arredonda para 100% (ou 0%) quando não é exato', () => {
+  assert.equal(fmtPercent(2358, 2363), '99,7%');
+  assert.equal(fmtPercent(2363, 2363), '100%');
+  assert.equal(fmtPercent(0, 10), '0%');
+  assert.equal(fmtPercent(1, 100000), 'menos de 0,1%');
+  assert.equal(fmtPercent(48, 52), '92,3%');
+  assert.equal(fmtPercent(1, 2), '50%');
+  assert.equal(fmtPercent(5, 0), '—');
 });

@@ -1674,6 +1674,9 @@ input[type='time'] {
   flex-direction: column;
   gap: 14px;
 }
+.playlist-card .tile-sub {
+  white-space: normal;
+}
 .playlist-head {
   display: flex;
   align-items: baseline;
