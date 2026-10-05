@@ -14,6 +14,7 @@ import { normalizeText } from './filters.js';
  * ORDEM (scrobbles do mais antigo para o mais recente)
  * - `alsoInOrder` (src/data/playlist.js): passagens extras consideradas normais,
  *   pelo número da posição (ex.: da nº 31 para a nº 1).
+ * - `noSkipFrom`: sair destas faixas para qualquer outra não conta como pulou/voltou.
  * - A ordem pode mudar com o tempo (`versions` em src/data/playlist.js): cada
  *   passagem é avaliada na ordem que valia no momento da música que chegou.
  * - Sessão: mais de `sessionGapSec` sem scrobbles começa uma sessão nova;
@@ -114,6 +115,7 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
   const index = buildPlaylistIndex(playlist);
   const versions = buildVersions(playlist);
   const alsoInOrder = new Set((playlist.alsoInOrder || []).map((r) => `${r.from}>${r.to}`));
+  const noSkipFrom = new Set((playlist.noSkipFrom || []).map((r) => r.track));
   const asc = [...scrobbles].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
   const positionById = new Map();
   const events = [];
@@ -164,7 +166,8 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
         events.push(makeEvent('outside', from, to, expectedTrack, ctx, { outside: outsideRun }));
       }
       transitions++;
-      if (track === expectedTrack || alsoInOrder.has(`${prevPos}>${pos}`)) inOrder++;
+      const freeExit = noSkipFrom.has(prev.track) && track !== prev.track; // pulo a partir dela não conta
+      if (track === expectedTrack || alsoInOrder.has(`${prevPos}>${pos}`) || freeExit) inOrder++;
       else {
         const type = track === prev.track ? 'repeat' : prevPos === N || pos > prevPos ? 'skip' : 'back';
         counts[type]++;
@@ -192,7 +195,7 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
     // Mudanças de ordem registradas (para avisar na tela).
     changes: versions.filter((v) => v.from).map((v) => ({ fromTs: v.fromTs, note: v.note })),
     // Regras extras de "na ordem" (para avisar na tela).
-    rules: (playlist.alsoInOrder || []).map((r) => r.note).filter(Boolean),
+    rules: [...(playlist.alsoInOrder || []), ...(playlist.noSkipFrom || [])].map((r) => r.note).filter(Boolean),
   };
 }
 

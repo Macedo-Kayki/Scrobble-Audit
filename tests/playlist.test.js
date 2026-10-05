@@ -78,51 +78,40 @@ test('a playlist embutida tem as 32 músicas do arquivo, sem dados pessoais', ()
   assert.equal(idx.byTitle.get('interludio').length, 2);
 });
 
-/* ---------- Mudança de ordem em 02/10/2026 10:00 (horário de Brasília) ---------- */
+/* ---------- Regras da playlist real ---------- */
 
-const CHANGE = Math.floor(Date.parse('2026-10-02T10:00:00-03:00') / 1000);
+const T0R = Math.floor(Date.parse('2026-10-03T15:00:00-03:00') / 1000);
 const real = (pos, ts) => {
   const t = PLAYLIST.tracks[pos - 1];
   return { id: `r${pos}-${ts}`, ts, track: t.title, artist: t.artists[0], album: t.album };
 };
+const seq = (positions) => positions.map((p, i) => real(p, T0R + i * 150));
 
-test('antes da mudança: "VC NÃO PARECE MAIS A MESMA" era a última', () => {
-  const t0 = CHANGE - 4 * 3600;
-  // 17 → 18 → 20 → 21 … 32 → 19 → 1 (a ordem antiga, sem a 19 no meio)
-  const seq = [17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 19, 1];
-  const r = analyzePlaylist(seq.map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
-  assert.equal(r.counts.total, 0, 'seguiu a ordem antiga');
-  assert.equal(r.positionById.get(`r19-${t0 + 15 * 150}`), 32, 'era a nº 32');
-  assert.equal(r.positionById.get(`r20-${t0 + 2 * 150}`), 19, 'a NÃO FAZEMOS POP era a nº 19');
-  assert.equal(r.changes.length, 1);
+test('"VC NÃO PARECE MAIS A MESMA" é sempre a nº 19, em qualquer data', () => {
+  for (const day of ['2026-10-01T12:00:00-03:00', '2026-10-05T12:00:00-03:00']) {
+    const ts = Math.floor(Date.parse(day) / 1000);
+    const r = analyzePlaylist([real(18, ts), real(19, ts + 150), real(20, ts + 300)], PLAYLIST);
+    assert.equal(r.positionById.get(`r19-${ts + 150}`), 19);
+    assert.equal(r.counts.total, 0);
+  }
+  assert.equal(PLAYLIST.versions, undefined, 'sem mudança de ordem registrada');
 });
 
-test('depois da mudança: vale a ordem atual', () => {
-  const t0 = CHANGE + 3600;
-  const inOrder = analyzePlaylist([18, 19, 20].map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
-  assert.equal(inOrder.counts.total, 0);
-  assert.equal(inOrder.positionById.get(`r19-${t0 + 150}`), 19);
-  const oldOrder = analyzePlaylist([18, 20].map((p, i) => real(p, t0 + i * 150)), PLAYLIST);
-  assert.equal(oldOrder.counts.skip, 1, 'pular a 19 agora é sair da ordem');
-  assert.equal(oldOrder.events[0].expected.title, PLAYLIST.tracks[18].title);
+test('sair da nº 19 para qualquer outra não conta como pulo', () => {
+  for (const next of [25, 3, 1, 32]) {
+    const r = analyzePlaylist(seq([18, 19, next]), PLAYLIST);
+    assert.equal(r.counts.total, 0, `19 → ${next}`);
+    assert.equal(r.stats.inOrder, r.stats.transitions);
+  }
+  // Chegar na 19 pulando continua contando, e repetir a 19 também.
+  const r2 = analyzePlaylist(seq([10, 19, 19]), PLAYLIST);
+  assert.equal(r2.counts.skip, 1, '10 → 19 pulou');
+  assert.equal(r2.counts.repeat, 1, '19 → 19 repetiu');
 });
 
-test('o instante da mudança vale para a ordem nova', () => {
-  const r = analyzePlaylist([real(18, CHANGE - 150), real(19, CHANGE)], PLAYLIST);
-  assert.equal(r.counts.total, 0, '18 → 19 às 10:00 já está na ordem nova');
-});
-
-test('voltar da nº 31 para a nº 1 é normal (antes e depois da mudança)', () => {
-  const after = CHANGE + 3600;
-  const r1 = analyzePlaylist([real(30, after), real(31, after + 150), real(1, after + 300)], PLAYLIST);
-  assert.equal(r1.counts.total, 0, '31 → 1 depois da mudança');
-  assert.equal(r1.stats.inOrder, 2);
-  // Antes da mudança, a nº 31 era o "Interlúdio" (faixa 32 de hoje).
-  const before = CHANGE - 4 * 3600;
-  const r2 = analyzePlaylist([real(31, before), real(32, before + 150), real(1, before + 300)], PLAYLIST);
-  assert.equal(r2.positionById.get(`r32-${before + 150}`), 31);
-  assert.equal(r2.counts.total, 0, '31 → 1 antes da mudança');
-  // Outras voltas para o início continuam contando.
-  const r3 = analyzePlaylist([real(29, after), real(30, after + 150), real(1, after + 300)], PLAYLIST);
-  assert.equal(r3.counts.back, 1, '30 → 1 ainda é voltar');
+test('voltar da nº 31 para a nº 1 é normal; da nº 30 para a nº 1, não', () => {
+  const r1 = analyzePlaylist(seq([30, 31, 1]), PLAYLIST);
+  assert.equal(r1.counts.total, 0);
+  const r2 = analyzePlaylist(seq([29, 30, 1]), PLAYLIST);
+  assert.equal(r2.counts.back, 1);
 });

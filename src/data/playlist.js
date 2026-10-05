@@ -393,18 +393,7 @@ export const PLAYLIST = Object.freeze({
   // (e de voltar da última para a primeira). Usam o número da posição na ordem
   // que valia no momento.
   alsoInOrder: [{ from: 31, to: 1, note: 'Voltar da nº 31 para a nº 1 é normal e conta como na ordem.' }],
-  // Ordem da playlist ao longo do tempo. `tracks` acima está na ordem ATUAL; cada versão
-  // lista as músicas pelo número atual (position) na ordem que valia a partir de `from`
-  // (horário de Brasília), até a próxima versão. A análise usa a versão de cada momento.
-  versions: [
-    {
-      from: null,
-      order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 19],
-    },
-    {
-      from: '2026-10-02T10:00:00-03:00',
-      note: '“VC NÃO PARECE MAIS A MESMA” saiu do fim da playlist (nº 32) para o nº 19.',
-      order: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-    },
-  ],
+  // Sair destas músicas (pelo número atual) para qualquer outra não conta como
+  // "pulou" nem "voltou".
+  noSkipFrom: [{ track: 19, note: 'Sair da nº 19 “VC NÃO PARECE MAIS A MESMA” para qualquer outra música não conta como pulo.' }],
 });
