@@ -110,10 +110,10 @@ test('ranking JSON (com entries completas) e CSV', () => {
 
 test('arquivos inválidos geram erro claro', () => {
   assert.throws(() => parseImport('', opts), /vazio/);
-  assert.throws(() => parseImport('{ quebrado', opts), /JSON inválido/);
+  assert.throws(() => parseImport('{ quebrado', opts), /corrompido/);
   assert.throws(() => parseImport('{"foo":1}', opts), /não reconhecido/);
-  assert.throws(() => parseImport('a,b\n1,2', opts), /não reconhecido/);
-  assert.throws(() => parseImport('[]', opts), /Nenhum scrobble/);
+  assert.throws(() => parseImport('a,b\n1,2', opts), /não reconhecida/);
+  assert.throws(() => parseImport('[]', opts), /nenhum scrobble/i);
 });
 
 test('parser CSV: aspas, quebras de linha e CRLF', () => {

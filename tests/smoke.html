@@ -82,6 +82,7 @@
         const top = app.derived.stats()?.topTracks[0];
         if (params.get('modal') === 'details') modals.openAuditDetails(app);
         if (params.get('modal') === 'track' && top) modals.openTrackTimes(app, trackKey(top));
+        if (params.get('modal') === 'settings') modals.openSettings(app);
         if (params.get('modal') === 'scrobble') modals.openScrobble(app, app.store.get().audit.scrobbles[0].id);
       }
       if (scenario === 'import') {

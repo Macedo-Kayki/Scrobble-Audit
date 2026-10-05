@@ -1,10 +1,10 @@
-import { DEFAULT_SETTINGS, APP } from '../config.js';
+import { DEFAULT_SETTINGS, APP, TIME_ZONE } from '../config.js';
 import { AppError, ErrorKind, friendlyMessage, isAbort } from '../core/errors.js';
 import { buildRange, runAudit, rangeKey } from '../core/audit.js';
 import { DEFAULT_FILTERS, filterScrobbles, countBy, sortScrobbles, groupScrobbles, sortGroups } from '../core/filters.js';
 import { computeStats } from '../core/stats.js';
 import { trackKey } from '../core/model.js';
-import { browserTimeZone, epochToInputValue, localParts, isValidTimeZone } from '../core/time.js';
+import { epochToInputValue, localParts } from '../core/time.js';
 import * as storage from '../core/storage.js';
 import { toCSV, auditToJSON, scrobbleToRecord, rankingToRecords, downloadFile, safeFilename } from '../core/export.js';
 import { parseImport, MAX_IMPORT_BYTES } from '../core/importer.js';
@@ -17,9 +17,9 @@ const HISTORY_MAX = 20;
 
 /** Controlador da aplicação: estado, ações e persistência. */
 export function createApp() {
-  const settings = { ...DEFAULT_SETTINGS, ...storage.load(storage.KEYS.settings, {}) };
-  if (settings.timeZone && !isValidTimeZone(settings.timeZone)) settings.timeZone = '';
-  const tz = settings.timeZone || browserTimeZone();
+  const { timeZone: _legacyTimeZone, ...savedSettings } = storage.load(storage.KEYS.settings, {});
+  const settings = { ...DEFAULT_SETTINGS, ...savedSettings };
+  const tz = TIME_ZONE;
   const restored = restoreAudit();
 
   const store = createStore({
@@ -63,7 +63,8 @@ export function createApp() {
   });
 
   // ---------- Derivados (memoizados) ----------
-  const timeZoneOf = (s) => s.settings.timeZone || browserTimeZone();
+  // Fuso único do app (horário de Brasília); o parâmetro fica para manter as assinaturas.
+  const timeZoneOf = () => TIME_ZONE;
   const playCountsOf = memo((scrobbles) => countBy(scrobbles, trackKey));
   const filteredOf = memo((scrobbles, filters, tzName, durations) => filterScrobbles(scrobbles, filters, { timeZone: tzName, durations, playCounts: playCountsOf(scrobbles) }));
   const statsOf = memo((list, tzName, range) => computeStats(list, { timeZone: tzName, range }));
@@ -159,8 +160,8 @@ export function createApp() {
           confirmLarge: ({ expected, estimatedRequests }) =>
             confirmDialog({
               title: 'Auditoria grande',
-              message: `Este intervalo tem ${fmtNum(expected)} scrobbles e exigirá cerca de ${fmtNum(estimatedRequests)} requisições (~${Math.ceil((estimatedRequests * 0.35) / 60)} min). Continuar?`,
-              confirmLabel: 'Baixar tudo',
+              message: `Esse período tem ${fmtNum(expected)} scrobbles. Buscar tudo pode levar cerca de ${Math.max(1, Math.ceil((estimatedRequests * 0.35) / 60))} minuto(s). Continuar?`,
+              confirmLabel: 'Buscar tudo',
             }),
         });
         if (ctrl !== auditCtrl) return;
@@ -174,7 +175,7 @@ export function createApp() {
           form: { ...st.form, username: audit.username },
           history: pushHistory(st.history, audit),
         }));
-        if (!persistedOk) toast('Auditoria concluída, mas grande demais para salvar no localStorage. Ela será perdida ao recarregar — exporte se precisar.', 'warning', 9000);
+        if (!persistedOk) toast('Auditoria concluída! Mas ela é grande demais para ficar salva neste navegador e vai sumir se você recarregar a página. Exporte se quiser guardar.', 'warning', 9000);
         notifyVerification(audit);
         // Mantém o ranking sincronizado se este usuário já estiver nele com o mesmo intervalo.
         const r = store.get().ranking;
@@ -222,13 +223,13 @@ export function createApp() {
         if (!s.durations.has(k) && !pending.has(k)) pending.set(k, sc);
       }
       if (!pending.size) {
-        toast('As durações de todas as músicas desta auditoria já foram consultadas.', 'info');
+        toast('Já buscamos a duração de todas as músicas desta auditoria.', 'info');
         return;
       }
       if (pending.size > 300) {
         const ok = await confirmDialog({
           title: 'Buscar durações',
-          message: `Serão ${fmtNum(pending.size)} requisições (uma por música única, ~${Math.ceil((pending.size * 0.3) / 60)} min). As durações ficam em cache local. Continuar?`,
+          message: `Vamos buscar quanto tempo dura cada uma das ${fmtNum(pending.size)} músicas. Isso pode levar cerca de ${Math.max(1, Math.ceil((pending.size * 0.3) / 60))} minuto(s). Continuar?`,
           confirmLabel: 'Buscar',
         });
         if (!ok) return;
@@ -254,7 +255,7 @@ export function createApp() {
           }
         };
         await Promise.all([worker(), worker(), worker()]);
-        toast(`Durações consultadas: ${fmtNum(done)} músicas.`, 'success');
+        toast(`Pronto! Buscamos a duração de ${fmtNum(done)} músicas.`, 'success');
       } catch (e) {
         if (!isAbort(e)) toast(friendlyMessage(e), 'error');
       } finally {
@@ -319,9 +320,9 @@ export function createApp() {
       if (r.range && rangeKey(r.range) === rangeKey(range)) return true;
       if (r.entries.length) {
         const ok = await confirmDialog({
-          title: 'Alterar intervalo do ranking',
-          message: 'Todos os usuários do ranking precisarão ser reauditados com o novo intervalo para que a comparação seja justa. Continuar?',
-          confirmLabel: 'Alterar intervalo',
+          title: 'Mudar o período do ranking',
+          message: 'Para a comparação ser justa, todos os usuários do ranking vão precisar ser auditados de novo no novo período. Continuar?',
+          confirmLabel: 'Mudar período',
         });
         if (!ok) return false;
       }
@@ -343,9 +344,9 @@ export function createApp() {
         return;
       }
       const ok = await confirmDialog({
-        title: 'Intervalo diferente',
-        message: 'O ranking usa outro intervalo de datas. Para comparar com justiça, este usuário será auditado no intervalo do ranking. Continuar?',
-        confirmLabel: 'Auditar no intervalo do ranking',
+        title: 'Período diferente',
+        message: 'O ranking usa outro período. Para comparar de forma justa, vamos auditar este usuário no mesmo período do ranking. Continuar?',
+        confirmLabel: 'Auditar no período do ranking',
       });
       if (ok) await actions.auditRankingUser(s.audit.username);
     },
@@ -359,7 +360,7 @@ export function createApp() {
         return;
       }
       if (store.get().rankingJob) {
-        toast('Aguarde a auditoria do ranking em andamento.', 'warning');
+        toast('Espere a auditoria do ranking que está em andamento terminar.', 'warning');
         return;
       }
       rankingCtrl = new AbortController();
@@ -407,9 +408,8 @@ export function createApp() {
       const s = store.get();
       const r = s.ranking.range;
       if (r) {
-        if (r.timeZone !== timeZoneOf(s)) actions.setSettings({ timeZone: r.timeZone });
         if (r.inclusiveEnd !== s.settings.inclusiveEnd) actions.setSettings({ inclusiveEnd: r.inclusiveEnd });
-        actions.setForm({ username, start: r.startInput, end: r.endInput });
+        actions.setForm({ username, ...rangeInputs(r) });
       } else actions.setForm({ username });
       actions.setView({ tab: 'audit' });
       actions.startAudit();
@@ -433,20 +433,20 @@ export function createApp() {
       const s = store.get();
 
       if (result.kind === 'ranking') {
-        if (s.rankingJob) return toast('Aguarde a auditoria do ranking em andamento.', 'warning');
+        if (s.rankingJob) return toast('Espere a auditoria do ranking que está em andamento terminar.', 'warning');
         if (s.ranking.entries.length) {
-          const ok = await confirmDialog({ title: 'Importar ranking', message: `Substituir o ranking atual (${s.ranking.entries.length} usuário(s)) pelo do arquivo?`, confirmLabel: 'Substituir' });
+          const ok = await confirmDialog({ title: 'Importar ranking', message: `Trocar o ranking atual (${s.ranking.entries.length} usuário(s)) pelo ranking do arquivo?`, confirmLabel: 'Trocar' });
           if (!ok) return;
         }
         store.set((st) => ({ ranking: result.ranking, view: { ...st.view, tab: 'ranking' } }));
-        toast(`Ranking importado: ${fmtNum(result.ranking.entries.length)} usuário(s).`, 'success');
+        toast(`Ranking importado com ${fmtNum(result.ranking.entries.length)} usuário(s).`, 'success');
         result.warnings.forEach((w) => toast(w, 'warning', 8000));
         return;
       }
 
-      if (s.status === 'running') return toast('Aguarde a auditoria em andamento terminar.', 'warning');
+      if (s.status === 'running') return toast('Espere a auditoria em andamento terminar.', 'warning');
       if (s.audit) {
-        const ok = await confirmDialog({ title: 'Importar auditoria', message: `Substituir a auditoria atual (${s.audit.username}) pela do arquivo?`, confirmLabel: 'Substituir' });
+        const ok = await confirmDialog({ title: 'Importar auditoria', message: `Trocar a auditoria atual (${s.audit.username}) pela do arquivo?`, confirmLabel: 'Trocar' });
         if (!ok) return;
       }
       const audit = result.audit;
@@ -466,7 +466,7 @@ export function createApp() {
       });
       toast(`Auditoria importada: ${fmtNum(audit.scrobbles.length)} scrobbles de ${audit.username}.`, 'success');
       result.warnings.forEach((w) => toast(w, 'warning', 9000));
-      if (!persistedOk) toast('A auditoria importada é grande demais para o localStorage e será perdida ao recarregar.', 'warning', 9000);
+      if (!persistedOk) toast('A auditoria importada é grande demais para ficar salva neste navegador e vai sumir se você recarregar a página.', 'warning', 9000);
     },
 
     /** Refaz na fonte a auditoria importada (mesmo usuário e intervalo) para verificá-la. */
@@ -474,9 +474,8 @@ export function createApp() {
       const s = store.get();
       const a = s.audit;
       if (!a) return;
-      if (a.range.timeZone !== timeZoneOf(s)) actions.setSettings({ timeZone: a.range.timeZone });
       if (a.range.inclusiveEnd !== s.settings.inclusiveEnd) actions.setSettings({ inclusiveEnd: a.range.inclusiveEnd });
-      actions.setForm({ username: a.username, start: a.range.startInput, end: a.range.endInput });
+      actions.setForm({ username: a.username, ...rangeInputs(a.range) });
       actions.startAudit();
     },
 
@@ -518,8 +517,8 @@ export function createApp() {
 
   function notifyVerification(audit) {
     const v = audit.verification;
-    if (v.status === 'missing') toast(`${audit.username}: ${fmtNum(v.fetchedInWindow)} de ${fmtNum(v.expected)} scrobbles coletados. Reaudite para tentar completar.`, 'warning', 9000);
-    else if (v.status === 'extra') toast(`${audit.username}: a contagem da API mudou durante a auditoria (possível exclusão de scrobbles).`, 'warning', 9000);
+    if (v.status === 'missing') toast(`${audit.username}: faltaram alguns scrobbles (encontramos ${fmtNum(v.fetchedInWindow)} de ${fmtNum(v.expected)}). Tente auditar de novo.`, 'warning', 9000);
+    else if (v.status === 'extra') toast(`${audit.username}: o total na Last.fm mudou durante a busca (talvez algum scrobble tenha sido apagado).`, 'warning', 9000);
   }
 
   return { store, actions, derived };
@@ -616,6 +615,11 @@ function throttle(fn, ms = 120) {
 
 const pad = (n) => String(n).padStart(2, '0');
 const wall = (y, m, d, h = 0, mi = 0, s = 0) => `${y}-${pad(m)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}`;
+
+/** Campos de início/fim do formulário para um período já calculado (no fuso do app). */
+function rangeInputs(range) {
+  return { start: epochToInputValue(range.from, TIME_ZONE), end: epochToInputValue(range.requestedTo ?? range.to, TIME_ZONE) };
+}
 
 export function defaultRangeInputs(tz) {
   return presetRange('today', tz);

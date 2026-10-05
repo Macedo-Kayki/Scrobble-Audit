@@ -232,6 +232,21 @@ export function formatDuration(totalSec) {
   return `${r}s`;
 }
 
+/** Duração de um período em palavras: "7 dias", "1 dia e 4 horas", "30 minutos". */
+export function formatSpan(totalSec) {
+  const s = Math.max(0, Math.round(totalSec));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const word = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const parts = [];
+  if (d) parts.push(word(d, 'dia', 'dias'));
+  if (h) parts.push(word(h, 'hora', 'horas'));
+  if (m && !d) parts.push(word(m, 'minuto', 'minutos'));
+  if (!parts.length) return word(s, 'segundo', 'segundos');
+  return parts.slice(0, 2).join(' e ');
+}
+
 /** Duração de faixa em ms -> "3:45". */
 export function formatTrackLength(ms) {
   if (ms == null) return '—';

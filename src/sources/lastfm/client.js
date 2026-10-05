@@ -92,12 +92,12 @@ export class LastfmClient {
 
     if (body && typeof body.error === 'number') throw mapApiError(body.error, body.message);
     if (this.proxyUrl && res.status === 404 && !body) {
-      throw new AppError(ErrorKind.UNAVAILABLE, `Proxy da API não encontrado em ${this.proxyUrl}. Rode o app com \`python servidor.py\` (ou na Vercel), ou informe sua própria key em Configurações.`, { code: 404 });
+      throw new AppError(ErrorKind.UNAVAILABLE, 'O site não conseguiu se conectar à Last.fm. Se você instalou o site, confira a configuração; ou coloque sua própria chave de acesso em Configurações.', { code: 404 });
     }
     if (res.status === 429) throw new AppError(ErrorKind.RATE_LIMITED, undefined, { code: 429, retryable: true });
     if (res.status >= 500) throw new AppError(ErrorKind.UNAVAILABLE, undefined, { code: res.status, retryable: true });
-    if (!res.ok) throw new AppError(ErrorKind.UNKNOWN, `HTTP ${res.status}`, { code: res.status });
-    if (!body) throw new AppError(ErrorKind.UNAVAILABLE, 'Resposta inválida da API (não-JSON).', { retryable: true });
+    if (!res.ok) throw new AppError(ErrorKind.UNKNOWN, `A Last.fm respondeu com um erro (código ${res.status}). Tente de novo.`, { code: res.status });
+    if (!body) throw new AppError(ErrorKind.UNAVAILABLE, 'A Last.fm enviou uma resposta que não deu para ler. Tente de novo.', { retryable: true });
     return body;
   }
 
@@ -110,7 +110,7 @@ export class LastfmClient {
   async getRecentTracks({ user, from, to, page = 1, limit = LASTFM.pageLimit }, opts) {
     const body = await this.call('user.getrecenttracks', { user, from, to, page, limit, extended: 0 }, opts);
     const rt = body.recenttracks;
-    if (!rt) throw new AppError(ErrorKind.INCONSISTENT, 'Resposta sem "recenttracks".', { retryable: true });
+    if (!rt) throw new AppError(ErrorKind.INCONSISTENT, undefined, { retryable: true });
     const attr = rt['@attr'] || {};
     let list = rt.track || [];
     if (!Array.isArray(list)) list = [list]; // a API retorna objeto quando há 1 item
@@ -144,8 +144,8 @@ export function mapApiError(code, message = '') {
   switch (code) {
     case 6:
       if (/user not found/i.test(msg)) return new AppError(ErrorKind.USER_NOT_FOUND, undefined, { code });
-      if (/track not found/i.test(msg)) return new AppError(ErrorKind.INVALID_INPUT, 'Faixa não encontrada na Last.fm.', { code });
-      return new AppError(ErrorKind.INVALID_INPUT, `Parâmetro inválido: ${msg}`, { code });
+      if (/track not found/i.test(msg)) return new AppError(ErrorKind.INVALID_INPUT, 'Música não encontrada na Last.fm.', { code });
+      return new AppError(ErrorKind.INVALID_INPUT, 'A Last.fm não aceitou a consulta. Confira os campos.', { code });
     case 10:
     case 26:
       // O proxy usa o código 10 quando o servidor está sem LASTFM_API_KEY.
@@ -158,9 +158,9 @@ export function mapApiError(code, message = '') {
     case 16:
       return new AppError(ErrorKind.UNAVAILABLE, undefined, { code, retryable: true });
     case 8:
-      return new AppError(ErrorKind.UNAVAILABLE, `A Last.fm falhou ao processar a requisição (${msg}).`, { code, retryable: true });
+      return new AppError(ErrorKind.UNAVAILABLE, 'A Last.fm teve um problema ao responder. Tente de novo.', { code, retryable: true });
     default:
-      return new AppError(ErrorKind.UNKNOWN, `Erro da Last.fm ${code}: ${msg}`, { code, retryable: RETRYABLE_CODES.has(code) });
+      return new AppError(ErrorKind.UNKNOWN, `A Last.fm respondeu com um erro (código ${code}). Tente de novo.`, { code, retryable: RETRYABLE_CODES.has(code) });
   }
 }
 

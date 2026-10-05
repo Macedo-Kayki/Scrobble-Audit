@@ -27,7 +27,7 @@ export function installDropZone(onFile) {
   const overlay = document.createElement('div');
   overlay.className = 'drop-overlay';
   overlay.hidden = true;
-  setHtml(overlay, html`<div class="drop-box">${icon('upload', 28)}<strong>Solte para importar</strong><span>JSON ou CSV exportado pelo Scrobble Audit</span></div>`);
+  setHtml(overlay, html`<div class="drop-box">${icon('upload', 28)}<strong>Solte para importar</strong><span>Arquivo ou planilha exportada pelo Scrobble Audit</span></div>`);
   document.body.appendChild(overlay);
   let depth = 0;
   const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');

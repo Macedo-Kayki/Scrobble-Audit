@@ -1,6 +1,7 @@
 import { AppError, ErrorKind } from './errors.js';
 import { ScrobbleCollector, annotateGaps, trackKey } from './model.js';
 import { epochToInputValue, isValidTimeZone } from './time.js';
+import { TIME_ZONE } from '../config.js';
 
 /**
  * Importação dos arquivos que o próprio app exporta:
@@ -21,7 +22,7 @@ export const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
  * @returns {{ kind: 'audit', audit: object, durations: Map<string, number>, skipped: number, warnings: string[] }
  *         | { kind: 'ranking', ranking: object, skipped: number, warnings: string[] }}
  */
-export function parseImport(text, { fileName = '', fallbackTimeZone, now = Date.now() }) {
+export function parseImport(text, { fileName = '', fallbackTimeZone = TIME_ZONE, now = Date.now() }) {
   const body = String(text || '').replace(/^﻿/, '').trim();
   if (!body) throw invalid('O arquivo está vazio.');
   const ctx = { fileName, fallbackTimeZone, now };
@@ -30,7 +31,7 @@ export function parseImport(text, { fileName = '', fallbackTimeZone, now = Date.
     try {
       data = JSON.parse(body);
     } catch {
-      throw invalid('JSON inválido.');
+      throw invalid('O arquivo está corrompido ou não foi criado pelo Scrobble Audit.');
     }
     return fromJSON(data, ctx);
   }
@@ -64,18 +65,18 @@ function fromJSON(data, ctx) {
       },
     });
   }
-  throw invalid('Formato não reconhecido. Importe um arquivo exportado pelo Scrobble Audit.');
+  throw invalid('Arquivo não reconhecido. Use um arquivo exportado pelo Scrobble Audit.');
 }
 
 /* ---------------- CSV ---------------- */
 
 function fromCSV(rows, ctx) {
-  if (rows.length < 2) throw invalid('CSV sem linhas de dados.');
+  if (rows.length < 2) throw invalid('A planilha está vazia.');
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const records = rows.slice(1).filter((r) => r.some((c) => c !== '')).map((r) => Object.fromEntries(header.map((h, i) => [h, unprotect(r[i] ?? '')])));
   if (header.includes('position') && header.includes('username') && header.includes('scrobbles')) return rankingFromRecords(records, ctx);
   if (header.includes('timestamp_unix') || header.includes('datetime_utc')) return buildAudit({ records, format: 'csv', ctx });
-  throw invalid('CSV não reconhecido: esperado o CSV de auditoria ou de ranking exportado pelo Scrobble Audit.');
+  throw invalid('Planilha não reconhecida. Use uma planilha exportada pelo Scrobble Audit.');
 }
 
 /** Desfaz a proteção contra fórmulas aplicada na exportação ('=..., '+..., ...). */
@@ -143,7 +144,7 @@ function buildAudit({ records, format, ctx, meta = {} }) {
     const ms = toInt(r?.duration_ms);
     if (ms > 0) durations.set(trackKey(s), ms);
   }
-  if (!valid.length) throw invalid('Nenhum scrobble válido no arquivo.');
+  if (!valid.length) throw invalid('Não encontramos nenhum scrobble no arquivo.');
   collector.addBatch(valid); // um único lote: duplicatas legítimas são preservadas
   const scrobbles = annotateGaps(collector.toArray());
 
@@ -153,7 +154,7 @@ function buildAudit({ records, format, ctx, meta = {} }) {
   const source = String(meta.source || first.source || 'lastfm');
   const tzCandidate = meta.timeZone || first.timezone;
   const timeZone = isValidTimeZone(tzCandidate) ? tzCandidate : ctx.fallbackTimeZone;
-  if (tzCandidate && timeZone !== tzCandidate) warnings.push(`Timezone "${tzCandidate}" do arquivo não é suportado; usando ${timeZone}.`);
+
 
   const minTs = scrobbles[scrobbles.length - 1].ts;
   const maxTs = scrobbles[0].ts;
@@ -163,12 +164,12 @@ function buildAudit({ records, format, ctx, meta = {} }) {
   if (rangeDerived) {
     from = minTs;
     to = maxTs;
-    warnings.push('O arquivo não informa o intervalo auditado; ele foi derivado do primeiro e do último scrobble.');
+    warnings.push('A planilha não diz qual período foi auditado; usamos do primeiro ao último scrobble.');
   }
   const outside = scrobbles.filter((s) => s.ts < from || s.ts > to).length;
-  if (outside) warnings.push(`${outside} scrobble(s) estão fora do intervalo declarado no arquivo.`);
-  if (skipped) warnings.push(`${skipped} linha(s) inválida(s) ignorada(s).`);
-  if (meta.scope === 'filtered') warnings.push('O arquivo contém só o resultado filtrado da auditoria original; totais e intervalos entre scrobbles refletem esse subconjunto.');
+  if (outside) warnings.push(`${outside} scrobble(s) estão fora do período informado no arquivo.`);
+  if (skipped) warnings.push(`${skipped} linha(s) com problema foram ignoradas.`);
+  if (meta.scope === 'filtered') warnings.push('Este arquivo tem só uma parte da auditoria original (o que estava filtrado). Os totais se referem só a essa parte.');
 
   const inclusiveEnd = meta.inclusiveEnd !== false;
   const importedAt = ctx.now;
@@ -245,7 +246,7 @@ function recordToScrobble(r) {
 
 function rankingFromJSON(data, ctx) {
   const range = normalizeRange(data.range, ctx);
-  if (!range) throw invalid('Ranking sem intervalo válido.');
+  if (!range) throw invalid('O arquivo de ranking não informa um período válido.');
   // Exportações novas trazem `entries` completas (sem perdas); antigas, só `ranking` (registros planos).
   if (Array.isArray(data.entries)) {
     let skipped = 0;
@@ -275,7 +276,7 @@ function rankingFromRecords(records, ctx, rangeIn = null) {
       },
       ctx,
     );
-  if (!range) throw invalid('Ranking sem intervalo válido.');
+  if (!range) throw invalid('O arquivo de ranking não informa um período válido.');
   let skipped = 0;
   const entries = [];
   for (const r of records) {
@@ -307,8 +308,8 @@ function rankingFromRecords(records, ctx, rangeIn = null) {
 }
 
 function finishRanking(range, entries, skipped) {
-  if (!entries.length) throw invalid('Nenhum usuário válido no ranking.');
-  const warnings = skipped ? [`${skipped} linha(s) inválida(s) ignorada(s).`] : [];
+  if (!entries.length) throw invalid('Não encontramos nenhum usuário no arquivo de ranking.');
+  const warnings = skipped ? [`${skipped} linha(s) com problema foram ignoradas.`] : [];
   return { kind: 'ranking', ranking: { range, entries }, skipped, warnings };
 }
 

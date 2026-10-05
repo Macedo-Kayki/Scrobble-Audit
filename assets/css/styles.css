@@ -628,7 +628,7 @@ input[type='time'] {
 }
 .query-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(190px, 1fr) minmax(190px, 1fr) minmax(170px, 1fr) auto;
+  grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 1fr) minmax(200px, 1fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -1398,6 +1398,148 @@ input[type='time'] {
 .rank-3 {
   background: var(--accent-soft);
   color: var(--accent-text);
+}
+/* Lista do ranking: cada pessoa numa linha, com as ações sempre visíveis. */
+.rank-card {
+  padding: 4px 0;
+}
+.rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rank-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 150px auto;
+  grid-template-areas: 'pos main total actions';
+  gap: 6px 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+.rank-row:first-child {
+  border-top: 0;
+}
+.rank-row > .rank {
+  grid-area: pos;
+}
+.rank-main {
+  grid-area: main;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rank-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rank-name {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.rank-bar {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.rank-bar span {
+  display: block;
+  height: 100%;
+  background: var(--series);
+  border-radius: 999px;
+  min-width: 2px;
+}
+.rank-meta {
+  overflow-wrap: anywhere;
+}
+.rank-total {
+  grid-area: total;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+}
+.rank-total strong {
+  font-size: 20px;
+  line-height: 1.2;
+}
+.rank-actions {
+  grid-area: actions;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+@media (max-width: 860px) {
+  .rank-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'pos main total'
+      'pos actions actions';
+  }
+  .rank-actions {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 480px) {
+  .rank-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-areas:
+      'pos main'
+      'pos total'
+      'pos actions';
+  }
+  .rank-total {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .rank-date {
+    display: none;
+  }
+}
+.ranking-range {
+  margin: 0;
+}
+
+/* "Detalhes técnicos" e chave de acesso recolhidos */
+.tech-details,
+.settings-key {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  margin-top: 16px;
+}
+.settings-key {
+  margin-top: 0;
+}
+.tech-details > summary,
+.settings-key > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.tech-details[open],
+.settings-key[open] {
+  padding-bottom: 12px;
+}
+.dropdown-label {
+  padding: 8px 10px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .stale-list {
   list-style: none;

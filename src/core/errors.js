@@ -19,18 +19,18 @@ export const ErrorKind = Object.freeze({
 });
 
 const MESSAGES = {
-  user_not_found: 'Usuário não encontrado. Confira o username.',
-  private_profile: 'Este usuário mantém o histórico de scrobbles privado.',
-  invalid_api_key: 'API key inválida ou suspensa. Revise em Configurações.',
-  missing_api_key: 'Configure sua API key da Last.fm em Configurações para começar.',
-  rate_limited: 'Limite de requisições da API atingido. Aguarde alguns minutos e tente de novo.',
-  unavailable: 'A API está indisponível no momento. Tente novamente mais tarde.',
-  network: 'Falha de rede. Verifique sua conexão.',
-  timeout: 'A API demorou demais para responder.',
-  invalid_input: 'Parâmetros inválidos.',
-  inconsistent_response: 'A API retornou dados inconsistentes durante a paginação.',
+  user_not_found: 'Não encontramos esse usuário na Last.fm. Confira se o nome está certo.',
+  private_profile: 'Este usuário deixou o histórico de músicas privado, então não dá para auditar.',
+  invalid_api_key: 'A chave de acesso da Last.fm não funcionou. Confira em Configurações.',
+  missing_api_key: 'Falta a chave de acesso da Last.fm. Abra Configurações para colocar a sua.',
+  rate_limited: 'A Last.fm está recebendo pedidos demais agora. Espere alguns minutos e tente de novo.',
+  unavailable: 'A Last.fm não está respondendo agora. Tente de novo daqui a pouco.',
+  network: 'Sem conexão com a internet. Confira sua conexão e tente de novo.',
+  timeout: 'A Last.fm demorou demais para responder. Tente de novo.',
+  invalid_input: 'Confira os campos preenchidos.',
+  inconsistent_response: 'A Last.fm enviou uma resposta incompleta. Tente de novo.',
   aborted: 'Operação cancelada.',
-  unknown: 'Erro inesperado.',
+  unknown: 'Algo deu errado. Tente de novo.',
 };
 
 export class AppError extends Error {

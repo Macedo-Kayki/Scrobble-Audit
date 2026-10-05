@@ -10,22 +10,22 @@ import { parseDateTimeInput, zonedToEpoch, isValidTimeZone, formatDateTime } fro
  *             inclusiveEnd: boolean, startInput: string, endInput: string, warnings: string[] }}
  */
 export function buildRange({ startInput, endInput, timeZone, inclusiveEnd = true }) {
-  if (!isValidTimeZone(timeZone)) throw new AppError(ErrorKind.INVALID_INPUT, `Timezone inválido: ${timeZone}`);
+  if (!isValidTimeZone(timeZone)) throw new AppError(ErrorKind.INVALID_INPUT, 'Fuso horário inválido.');
   const sp = parseDateTimeInput(startInput);
   const ep = parseDateTimeInput(endInput);
-  if (!sp) throw new AppError(ErrorKind.INVALID_INPUT, 'Data/hora inicial inválida.');
-  if (!ep) throw new AppError(ErrorKind.INVALID_INPUT, 'Data/hora final inválida.');
+  if (!sp) throw new AppError(ErrorKind.INVALID_INPUT, 'Preencha a data e a hora de início.');
+  if (!ep) throw new AppError(ErrorKind.INVALID_INPUT, 'Preencha a data e a hora de fim.');
   const s = zonedToEpoch(sp, timeZone);
   const e = zonedToEpoch(ep, timeZone);
   const warnings = [];
-  if (!s.valid) warnings.push(`O horário inicial não existe em ${timeZone} (mudança de horário de verão). Usado o primeiro instante válido seguinte.`);
-  if (!e.valid) warnings.push(`O horário final não existe em ${timeZone} (mudança de horário de verão). Usado o primeiro instante válido seguinte.`);
+  if (!s.valid) warnings.push('O horário de início não existe por causa do horário de verão. Usamos o horário válido logo depois.');
+  if (!e.valid) warnings.push('O horário de fim não existe por causa do horário de verão. Usamos o horário válido logo depois.');
   const from = Math.floor(s.epochMs / 1000);
   const requestedTo = Math.floor(e.epochMs / 1000);
   const to = inclusiveEnd ? requestedTo : requestedTo - 1;
-  if (to < from) throw new AppError(ErrorKind.INVALID_INPUT, 'A data/hora final deve ser posterior à inicial.');
+  if (to < from) throw new AppError(ErrorKind.INVALID_INPUT, 'O fim precisa ser depois do início.');
   const nowSec = Math.floor(Date.now() / 1000);
-  if (from > nowSec) warnings.push('O intervalo começa no futuro; não haverá scrobbles.');
+  if (from > nowSec) warnings.push('Esse período começa no futuro, então ainda não há scrobbles.');
   return { from, to, requestedTo, timeZone, inclusiveEnd, startInput, endInput, warnings };
 }
 
@@ -47,7 +47,7 @@ export function describeRange(range, tz = range.timeZone) {
  */
 export async function runAudit({ source, username, range, signal, onProgress = () => {}, confirmLarge }) {
   const name = String(username || '').trim();
-  if (!name) throw new AppError(ErrorKind.INVALID_INPUT, 'Informe um username.');
+  if (!name) throw new AppError(ErrorKind.INVALID_INPUT, 'Digite o nome de usuário da Last.fm.');
   const startedAt = Date.now();
 
   onProgress({ phase: 'user' });

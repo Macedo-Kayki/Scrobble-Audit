@@ -3,8 +3,8 @@ import { buildRange } from '../../core/audit.js';
 import { activeFilterCount, GROUP_MODES, SORT_OPTIONS } from '../../core/filters.js';
 import { trackKey } from '../../core/model.js';
 import { ErrorKind } from '../../core/errors.js';
-import { AUDIT } from '../../config.js';
-import { listTimeZones, browserTimeZone, describeTimeZone, formatDateTime, formatDate, formatTime, formatDuration, formatTrackLength } from '../../core/time.js';
+import { AUDIT, TIME_ZONE, TIME_ZONE_LABEL } from '../../config.js';
+import { formatDateTime, formatDate, formatTime, formatDuration, formatSpan, formatTrackLength } from '../../core/time.js';
 import { columnChart, barList } from '../components/charts.js';
 import * as modals from './modals.js';
 import { pickFile } from '../components/filePicker.js';
@@ -12,25 +12,25 @@ import { pickFile } from '../components/filePicker.js';
 const PRESETS = [
   ['today', 'Hoje'],
   ['yesterday', 'Ontem'],
-  ['last24h', 'Últimas 24h'],
+  ['last24h', 'Últimas 24 horas'],
   ['last7d', 'Últimos 7 dias'],
   ['thisMonth', 'Este mês'],
   ['lastMonth', 'Mês passado'],
 ];
 
 const PHASES = {
-  user: 'Validando usuário…',
-  probe: 'Consultando total de scrobbles no intervalo…',
-  fetch: 'Baixando scrobbles…',
-  verify: 'Verificando contagem com a API…',
-  reconcile: 'Reconciliando lacunas…',
+  user: 'Procurando o usuário…',
+  probe: 'Contando os scrobbles do período…',
+  fetch: 'Buscando os scrobbles…',
+  verify: 'Conferindo o total com a Last.fm…',
+  reconcile: 'Buscando scrobbles que faltaram…',
   done: 'Finalizando…',
 };
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export function mountAuditView(root, app) {
-  const { store, actions, derived } = app;
+  const { store, derived } = app;
   setHtml(
     root,
     html`<div id="onboarding"></div>
@@ -52,31 +52,29 @@ export function mountAuditView(root, app) {
   bindSummary(root, app);
 
   let lastResultsKey = null;
-  let lastChartsKey = null;
+  let lastFiltered = null;
 
   const update = (s, p) => {
-    if (!p || s.form !== p.form || s.settings !== p.settings) syncForm(form, s, app);
+    if (!p || s.form !== p.form || s.settings !== p.settings) syncForm(form, s);
     if (!p || s.status !== p.status) toggleRunning(form, s.status === 'running');
     if (!p || s.history !== p.history) renderHistory(form, s.history);
     if (!p || s.settings !== p.settings) renderOnboarding($('#onboarding', root), app);
-    if (!p || s.status !== p.status || s.progress !== p.progress || s.error !== p.error || s.notice !== p.notice) renderStatus($('#audit-status', root), s, app);
+    if (!p || s.status !== p.status || s.progress !== p.progress || s.error !== p.error || s.notice !== p.notice) renderStatus($('#audit-status', root), s);
     if (!p || s.filters !== p.filters || s.durations !== p.durations || s.audit !== p.audit) syncFilters($('#filters-panel', root), s.filters, s.durations, s.audit);
 
     const filtered = derived.filtered();
-    const tz = derived.timeZone();
-    const summaryKey = [s.audit, filtered, tz, s.auditPersisted, s.ranking, s.status].map(identity);
+    const summaryKey = [s.audit, filtered, s.auditPersisted, s.ranking, s.status];
     if (!p || summaryKey.some((v, i) => v !== update.lastSummary?.[i])) {
       update.lastSummary = summaryKey;
       renderSummary($('#audit-summary', root), s, app);
     }
-    const chartsKey = `${tz}`;
-    if (!p || filtered !== lastChartsKey?.filtered || chartsKey !== lastChartsKey?.tz) {
-      lastChartsKey = { filtered, tz: chartsKey };
+    if (!p || filtered !== lastFiltered) {
+      lastFiltered = filtered;
       renderCharts($('#audit-charts', root), s, app);
     }
     $('#audit-workspace', root).hidden = !s.audit;
     renderEmpty($('#audit-empty', root), s);
-    const resultsKey = [s.audit, filtered, s.view, tz, s.settings.pageSize, s.durations, s.durationJob, s.filters].map(identity);
+    const resultsKey = [s.audit, filtered, s.view, s.settings.pageSize, s.durations, s.durationJob, s.filters];
     if (!lastResultsKey || resultsKey.some((v, i) => v !== lastResultsKey[i])) {
       lastResultsKey = resultsKey;
       renderResults($('#results', root), s, app);
@@ -86,40 +84,29 @@ export function mountAuditView(root, app) {
   update(store.get(), null);
 }
 
-const identity = (x) => x;
-
 /* =============== Formulário =============== */
 
 function renderForm(form, app) {
   const { actions } = app;
-  const zones = listTimeZones();
-  const btz = browserTimeZone();
   setHtml(
     form,
     html`<div class="query-head">
         <h2 class="card-title">${icon('search', 18)} Nova auditoria</h2>
-        <p class="muted small">Busca exata por timestamp real de cada scrobble, em qualquer intervalo.</p>
-        <button type="button" class="btn btn-sm btn-ghost query-import" data-action="import" title="Abrir um JSON ou CSV exportado pelo Scrobble Audit (também dá para arrastar o arquivo para a página)">${icon('upload', 14)} Importar</button>
+        <p class="muted small">Escolha uma pessoa e um período para ver tudo o que ela ouviu, no horário exato.</p>
+        <button type="button" class="btn btn-sm btn-ghost query-import" data-action="import" title="Abrir um arquivo que você exportou antes (também dá para arrastar o arquivo para a página)">${icon('upload', 14)} Importar</button>
       </div>
       <div class="query-grid">
         <label class="field field-user">
-          <span class="field-label">Usuário</span>
-          <span class="input-icon">${icon('user', 16)}<input name="username" list="user-history" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="username da Last.fm" required /></span>
+          <span class="field-label">Usuário da Last.fm</span>
+          <span class="input-icon">${icon('user', 16)}<input name="username" list="user-history" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="nome de usuário" required /></span>
         </label>
         <label class="field">
-          <span class="field-label">Início</span>
+          <span class="field-label">De</span>
           <input type="datetime-local" step="1" name="start" required />
         </label>
         <label class="field">
-          <span class="field-label">Fim</span>
+          <span class="field-label">Até</span>
           <input type="datetime-local" step="1" name="end" required />
-        </label>
-        <label class="field">
-          <span class="field-label">Timezone</span>
-          <select name="timeZone">
-            <option value="">Navegador — ${btz}</option>
-            ${zones.map((z) => html`<option value="${z}">${z}</option>`)}
-          </select>
         </label>
         <div class="field field-submit">
           <button type="submit" class="btn btn-primary" data-role="submit">${icon('search', 16)} Auditar</button>
@@ -127,7 +114,7 @@ function renderForm(form, app) {
         </div>
       </div>
       <div class="query-foot">
-        <div class="chips" role="group" aria-label="Intervalos rápidos">
+        <div class="chips" role="group" aria-label="Atalhos de período">
           ${PRESETS.map(([id, label]) => html`<button type="button" class="chip" data-preset="${id}">${label}</button>`)}
         </div>
         <p class="range-preview" id="range-preview"></p>
@@ -144,9 +131,6 @@ function renderForm(form, app) {
     const t = e.target;
     if (t.name === 'username' || t.name === 'start' || t.name === 'end') actions.setForm({ [t.name]: t.value });
   });
-  form.addEventListener('change', (e) => {
-    if (e.target.name === 'timeZone') actions.setSettings({ timeZone: e.target.value });
-  });
   on(form, 'click', '[data-preset]', (_e, b) => actions.applyPreset(b.dataset.preset));
   on(form, 'click', '[data-action="cancel"]', () => actions.cancelAudit());
   on(form, 'click', '[data-action="import"]', async () => actions.importFile(await pickFile()));
@@ -160,20 +144,18 @@ function renderForm(form, app) {
   });
 }
 
-function syncForm(form, s, app) {
+function syncForm(form, s) {
   const el = form.elements;
   for (const name of ['username', 'start', 'end']) {
     if (el[name].value !== s.form[name] && document.activeElement !== el[name]) el[name].value = s.form[name] || '';
   }
-  if (el.timeZone.value !== s.settings.timeZone) el.timeZone.value = s.settings.timeZone;
   const preview = $('#range-preview', form);
   try {
-    const r = buildRange({ startInput: s.form.start, endInput: s.form.end, timeZone: app.derived.timeZone(), inclusiveEnd: s.settings.inclusiveEnd });
-    const secs = r.to - r.from + 1;
+    const r = buildRange({ startInput: s.form.start, endInput: s.form.end, timeZone: TIME_ZONE, inclusiveEnd: s.settings.inclusiveEnd });
     setHtml(
       preview,
-      html`${icon('clock', 14)} <strong>${formatDateTime(r.from, r.timeZone)}</strong> → <strong>${formatDateTime(r.requestedTo, r.timeZone)}</strong>
-        <span class="muted">· ${describeTimeZone(r.timeZone, r.from)} · ${formatDuration(secs)} · fim ${r.inclusiveEnd ? 'inclusivo' : 'exclusivo'} · Unix ${r.from}–${r.to}</span>
+      html`${icon('clock', 14)} De <strong>${formatDateTime(r.from, r.timeZone)}</strong> até <strong>${formatDateTime(r.requestedTo, r.timeZone)}</strong>
+        <span class="muted">· ${formatSpan(r.requestedTo - r.from)} · ${TIME_ZONE_LABEL}</span>
         ${r.warnings.length ? html`<span class="text-warning"> · ${r.warnings.join(' ')}</span>` : ''}`,
     );
     preview.classList.remove('invalid');
@@ -197,18 +179,18 @@ function renderHistory(form, history) {
   setHtml(
     $('#history', form),
     history.length
-      ? html`<span class="muted small">Recentes:</span>
+      ? html`<span class="muted small">Usados recentemente:</span>
           ${history.slice(0, 10).map(
             (h) => html`<span class="history-chip">
               <button type="button" data-history="${h.username}" title="Auditado em ${new Date(h.at).toLocaleString('pt-BR')}">${h.username}</button>
-              <button type="button" class="history-x" data-history-remove="${h.username}" aria-label="Remover ${h.username} do histórico">${icon('x', 12)}</button>
+              <button type="button" class="history-x" data-history-remove="${h.username}" aria-label="Tirar ${h.username} da lista">${icon('x', 12)}</button>
             </span>`,
           )}`
       : '',
   );
 }
 
-/* =============== Onboarding / status =============== */
+/* =============== Boas-vindas / andamento =============== */
 
 function renderOnboarding(el, app) {
   if (app.derived.hasApiKey()) return setHtml(el, '');
@@ -216,11 +198,12 @@ function renderOnboarding(el, app) {
     el,
     html`<div class="card onboarding">
       <div>
-        <h2 class="card-title">${icon('settings', 18)} Configure sua API key da Last.fm</h2>
+        <h2 class="card-title">${icon('settings', 18)} Falta só a chave de acesso da Last.fm</h2>
+        <p class="muted small">É grátis e leva um minuto:</p>
         <ol class="steps">
-          <li>Crie uma conta de API em <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api/account/create</a> (é gratuito; o campo “Callback URL” pode ficar vazio).</li>
-          <li>Copie a <strong>API key</strong> (não é necessário o “shared secret”).</li>
-          <li>Cole em Configurações (fica só no seu navegador) — ou, para não expor a key, rode <code>python servidor.py</code> com a key no arquivo <code>.env</code> (veja o README).</li>
+          <li>Entre em <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api/account/create</a> com a sua conta da Last.fm.</li>
+          <li>Preencha um nome e uma descrição quaisquer e confirme.</li>
+          <li>Copie o código que aparece como <strong>API key</strong> e cole em Configurações.</li>
         </ol>
       </div>
       <button class="btn btn-primary" data-action="open-settings">Abrir configurações</button>
@@ -228,7 +211,7 @@ function renderOnboarding(el, app) {
   );
 }
 
-function renderStatus(el, s, app) {
+function renderStatus(el, s) {
   if (s.status === 'running' && s.progress) {
     const p = s.progress;
     const pct = p.expected ? Math.min(100, (p.fetched / p.expected) * 100) : null;
@@ -237,8 +220,8 @@ function renderStatus(el, s, app) {
       html`<div class="card progress-card">
         <div class="progress-head">
           <span class="spinner" aria-hidden="true"></span>
-          <strong>${PHASES[p.phase] || 'Processando…'}</strong>
-          <span class="muted">${p.expected ? html`${fmtNum(p.fetched)} de ${fmtNum(p.expected)} scrobbles` : ''}${p.pass ? ` · passada ${p.pass}` : ''}</span>
+          <strong>${PHASES[p.phase] || 'Trabalhando…'}</strong>
+          <span class="muted">${p.expected ? html`${fmtNum(p.fetched)} de ${fmtNum(p.expected)} scrobbles` : ''}</span>
           <button class="btn btn-sm" data-action="cancel-audit">Cancelar</button>
         </div>
         <div class="progress ${pct == null ? 'indeterminate' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" ${pct != null ? raw(`aria-valuenow="${Math.round(pct)}"`) : ''}>
@@ -257,7 +240,7 @@ function renderStatus(el, s, app) {
         <div class="alert-body"><strong>${errorTitle(s.error.kind)}</strong><p>${s.error.message}</p></div>
         <div class="alert-actions">
           ${isKey ? html`<button class="btn btn-sm" data-action="open-settings">Configurações</button>` : ''}
-          ${retryable ? html`<button class="btn btn-sm" data-action="retry">${icon('refresh', 14)} Tentar novamente</button>` : ''}
+          ${retryable ? html`<button class="btn btn-sm" data-action="retry">${icon('refresh', 14)} Tentar de novo</button>` : ''}
           <button class="btn btn-sm btn-ghost" data-action="dismiss-error" aria-label="Fechar">${icon('x', 14)}</button>
         </div>
       </div>`,
@@ -276,17 +259,17 @@ function renderStatus(el, s, app) {
 function errorTitle(kind) {
   return (
     {
-      user_not_found: 'Usuário inexistente',
+      user_not_found: 'Usuário não encontrado',
       private_profile: 'Perfil privado',
-      invalid_api_key: 'API key inválida',
-      missing_api_key: 'API key ausente',
-      rate_limited: 'Limite da API',
-      unavailable: 'API indisponível',
-      network: 'Sem conexão',
-      timeout: 'Tempo esgotado',
-      invalid_input: 'Verifique os campos',
-      inconsistent_response: 'Resposta inconsistente',
-    }[kind] || 'Erro'
+      invalid_api_key: 'Chave de acesso não funcionou',
+      missing_api_key: 'Falta a chave de acesso',
+      rate_limited: 'Muitos pedidos agora',
+      unavailable: 'A Last.fm não respondeu',
+      network: 'Sem internet',
+      timeout: 'Demorou demais',
+      invalid_input: 'Confira os campos',
+      inconsistent_response: 'Resposta incompleta',
+    }[kind] || 'Algo deu errado'
   );
 }
 
@@ -296,9 +279,9 @@ function renderEmpty(el, s) {
     el,
     html`<div class="empty-state">
       ${icon('logo', 40)}
-      <h2>Audite qualquer intervalo de scrobbles</h2>
-      <p class="muted">Informe um usuário e um intervalo exato — por exemplo <strong>05/10/2026 08:00 → 13:00</strong> — e o Scrobble Audit baixa, verifica e analisa cada scrobble pelo seu timestamp real.</p>
-      <p class="muted small">Já tem uma auditoria exportada? <button type="button" class="link-inline" data-action="import-empty">Importe o arquivo</button> ou arraste-o para cá.</p>
+      <h2>Veja exatamente o que foi ouvido, e quando</h2>
+      <p class="muted">Digite o nome de usuário da Last.fm e escolha um período — por exemplo <strong>de 05/10/2026 08:00 até 13:00</strong>. O Scrobble Audit busca cada música ouvida nesse tempo, confere o total com a Last.fm e mostra tudo organizado.</p>
+      <p class="muted small">Já tem uma auditoria salva? <button type="button" class="link-inline" data-action="import-empty">Abra o arquivo</button> ou arraste-o para cá.</p>
     </div>`,
   );
 }
@@ -307,7 +290,7 @@ function renderEmpty(el, s) {
 
 function bindSummary(root, app) {
   const { actions } = app;
-  on(root, 'click', '[data-action]', (e, el) => {
+  on(root, 'click', '[data-action]', (_e, el) => {
     const a = el.dataset.action;
     if (a === 'open-settings') modals.openSettings(app);
     else if (a === 'retry') actions.startAudit();
@@ -335,18 +318,33 @@ function renderSummary(el, s, app) {
   const inRanking = s.ranking.entries.some((e) => e.username.toLowerCase() === a.username.toLowerCase() && s.ranking.range && e.rangeKey === `${s.ranking.range.from}-${s.ranking.range.to}`);
   const source = app.derived.source();
   const vInfo = {
-    verified: { cls: 'ok', ic: 'check', title: 'Contagem verificada', text: html`${fmtNum(v.fetchedInWindow)} scrobbles coletados = ${fmtNum(v.expected)} informados pela ${a.sourceName} para a janela consultada.` },
-    missing: { cls: 'warn', ic: 'alert', title: 'Contagem incompleta', text: html`${fmtNum(v.fetchedInWindow)} de ${fmtNum(v.expected)} scrobbles coletados após ${v.reconciliationPasses} reconciliação(ões). Reaudite para tentar completar.` },
-    extra: { cls: 'warn', ic: 'alert', title: 'Contagem divergente', text: html`Coletados ${fmtNum(v.fetchedInWindow)}; a API informa agora ${fmtNum(v.expected)}. Provavelmente houve scrobbles excluídos durante a auditoria.` },
+    verified: {
+      cls: 'ok',
+      ic: 'check',
+      title: 'Tudo conferido',
+      text: html`Encontramos ${fmtNum(v.fetchedInWindow)} scrobbles — exatamente o total que a ${a.sourceName} informa para esse período.`,
+    },
+    missing: {
+      cls: 'warn',
+      ic: 'alert',
+      title: 'Faltaram alguns scrobbles',
+      text: html`Encontramos ${fmtNum(v.fetchedInWindow)} dos ${fmtNum(v.expected)} que a ${a.sourceName} informa. Tente auditar de novo.`,
+    },
+    extra: {
+      cls: 'warn',
+      ic: 'alert',
+      title: 'O total mudou durante a busca',
+      text: html`Encontramos ${fmtNum(v.fetchedInWindow)} scrobbles, mas agora a ${a.sourceName} informa ${fmtNum(v.expected)}. Provavelmente algum scrobble foi apagado enquanto a busca acontecia.`,
+    },
     imported: {
       cls: 'info',
       ic: 'upload',
-      title: 'Importado de arquivo',
-      text: html`${fmtNum(a.scrobbles.length)} scrobbles carregados de <strong>${a.imported?.fileName || 'arquivo'}</strong>, sem nova consulta à ${a.sourceName}.
-        ${v.original?.status === 'verified' ? html`Na exportação, a contagem estava verificada (${fmtNum(v.original.expected)}).` : v.original ? html`Na exportação, o status era “${v.original.status}”.` : 'O arquivo não traz verificação.'}
-        ${a.imported?.scope === 'filtered' ? html`<br /><span class="text-warning">Contém só o resultado filtrado da auditoria original.</span>` : ''}`,
+      title: 'Aberto de um arquivo',
+      text: html`${fmtNum(a.scrobbles.length)} scrobbles carregados de <strong>${a.imported?.fileName || 'arquivo'}</strong>, sem buscar de novo na ${a.sourceName}.
+        ${v.original?.status === 'verified' ? html`Quando o arquivo foi salvo, o total estava conferido.` : v.original ? '' : 'O arquivo não diz se o total foi conferido.'}
+        ${a.imported?.scope === 'filtered' ? html`<br /><span class="text-warning">Este arquivo tem só uma parte da auditoria original (o que estava filtrado).</span>` : ''}`,
     },
-  }[v.status] || { cls: 'warn', ic: 'info', title: 'Não verificado', text: '' };
+  }[v.status] || { cls: 'warn', ic: 'info', title: 'Não conferido', text: '' };
   const imp = a.imported;
 
   const top = stats.topTracks[0];
@@ -357,40 +355,40 @@ function renderSummary(el, s, app) {
       <div class="card user-card">
         ${u.image ? html`<img class="avatar" src="${u.image}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<div class="avatar avatar-fallback" aria-hidden="true">${a.username.slice(0, 1).toUpperCase()}</div>`}
         <div class="user-meta">
-          <a class="user-name" href="${u.url || source.profileUrl(a.username)}" target="_blank" rel="noopener">${a.username} ${icon('external', 13)}</a>
+          <a class="user-name" href="${u.url || source.profileUrl(a.username)}" target="_blank" rel="noopener" title="Abrir o perfil na ${a.sourceName}">${a.username} ${icon('external', 13)}</a>
           <span class="muted small">${[u.realName, u.country].filter(Boolean).join(' · ') || a.sourceName}</span>
-          <span class="muted small">${u.playcount != null ? html`${fmtNum(u.playcount)} scrobbles no total` : ''}${u.registeredTs ? html` · desde ${formatDate(u.registeredTs, tz)}` : ''}</span>
+          <span class="muted small">${u.playcount != null ? html`${fmtNum(u.playcount)} scrobbles desde sempre` : ''}${u.registeredTs ? html` · na ${a.sourceName} desde ${formatDate(u.registeredTs, tz)}` : ''}</span>
         </div>
         <div class="user-actions">
-          <button class="btn btn-sm" data-action="audit-details">${icon('info', 14)} Detalhes da auditoria</button>
-          <button class="btn btn-sm ${inRanking ? '' : 'btn-primary-soft'}" data-action="add-ranking">${icon('trophy', 14)} ${inRanking ? 'Atualizar no ranking' : 'Adicionar ao ranking'}</button>
+          <button class="btn btn-sm" data-action="audit-details">${icon('info', 14)} Detalhes</button>
+          <button class="btn btn-sm ${inRanking ? '' : 'btn-primary-soft'}" data-action="add-ranking">${icon('trophy', 14)} ${inRanking ? 'Atualizar no ranking' : 'Colocar no ranking'}</button>
         </div>
       </div>
       <div class="card verify verify-${vInfo.cls}">
         <div class="verify-head">${icon(vInfo.ic, 18)} <strong>${vInfo.title}</strong></div>
         <p class="small">${vInfo.text}</p>
-        <p class="small muted">${formatDateTime(a.range.from, a.range.timeZone)} → ${formatDateTime(a.range.requestedTo ?? a.range.to, a.range.timeZone)} · ${describeTimeZone(a.range.timeZone, a.range.from)}</p>
+        <p class="small muted">De ${formatDateTime(a.range.from, tz)} até ${formatDateTime(a.range.requestedTo ?? a.range.to, tz)} (${formatSpan((a.range.requestedTo ?? a.range.to) - a.range.from)})</p>
         ${imp
-          ? html`<p class="small muted">${imp.exportedAt ? `Exportado em ${new Date(imp.exportedAt).toLocaleString('pt-BR')} · ` : ''}importado em ${new Date(imp.importedAt).toLocaleString('pt-BR')}${imp.rangeDerived ? ' · intervalo derivado dos dados' : ''}${s.auditPersisted === false ? ' · não salvo localmente' : ''}</p>
-              <p><button class="btn btn-sm" data-action="reaudit-imported" ${s.status === 'running' ? 'disabled' : ''}>${icon('refresh', 14)} Reauditar na ${a.sourceName}</button></p>`
-          : html`<p class="small muted">Auditado em ${new Date(a.finishedAt).toLocaleString('pt-BR')} · ${fmtNum(a.requests)} requisições · ${formatDuration(a.durationMs / 1000)}${s.auditPersisted === false ? ' · não salvo localmente' : ''}</p>`}
+          ? html`<p class="small muted">${imp.exportedAt ? `Arquivo salvo em ${new Date(imp.exportedAt).toLocaleString('pt-BR')} · ` : ''}aberto em ${new Date(imp.importedAt).toLocaleString('pt-BR')}${s.auditPersisted === false ? ' · não ficou salvo neste navegador' : ''}</p>
+              <p><button class="btn btn-sm" data-action="reaudit-imported" ${s.status === 'running' ? 'disabled' : ''}>${icon('refresh', 14)} Auditar de novo na ${a.sourceName}</button></p>`
+          : html`<p class="small muted">Auditado em ${new Date(a.finishedAt).toLocaleString('pt-BR')} · levou ${formatDuration(a.durationMs / 1000)}${s.auditPersisted === false ? ' · não ficou salvo neste navegador' : ''}</p>`}
       </div>
     </div>
-    <div class="tiles" aria-label="Estatísticas">
-      ${tile('Scrobbles', fmtNum(stats.total), isFiltered ? `filtrados de ${fmtNum(a.scrobbles.length)}` : stats.perDay != null ? `${fmtDec(stats.perDay)} por dia` : '')}
-      ${tile('Músicas únicas', fmtNum(stats.uniqueTracks))}
-      ${tile('Artistas únicos', fmtNum(stats.uniqueArtists))}
-      ${tile('Álbuns únicos', fmtNum(stats.uniqueAlbums), 'apenas com álbum informado')}
-      ${tile('Música mais ouvida', top ? top.track : '—', top ? `${top.artist} · ${fmtNum(top.count)}×${stats.topTrackTies > 1 ? ` · empate com ${stats.topTrackTies - 1}` : ''}` : '', top ? { action: 'top-track', key: trackKey(top) } : null)}
-      ${tile('Artista mais ouvido', topA ? topA.artist : '—', topA ? `${fmtNum(topA.count)} scrobbles${stats.topArtistTies > 1 ? ` · empate com ${stats.topArtistTies - 1}` : ''}` : '', topA ? { action: 'top-artist', key: topA.artist } : null)}
-      ${tile('Intervalos < ' + AUDIT.shortGapSeconds + 's', fmtNum(stats.shortGaps), 'scrobbles muito próximos do anterior', null, stats.shortGaps > 0 ? 'tile-flag' : '')}
+    <div class="tiles" aria-label="Resumo">
+      ${tile('Scrobbles', fmtNum(stats.total), isFiltered ? `filtrados, de ${fmtNum(a.scrobbles.length)}` : stats.perDay != null ? `${fmtDec(stats.perDay)} por dia, em média` : '')}
+      ${tile('Músicas diferentes', fmtNum(stats.uniqueTracks))}
+      ${tile('Artistas diferentes', fmtNum(stats.uniqueArtists))}
+      ${tile('Álbuns diferentes', fmtNum(stats.uniqueAlbums), 'só os que têm álbum informado')}
+      ${tile('Música mais ouvida', top ? top.track : '—', top ? `${top.artist} · ${fmtNum(top.count)} vez(es)${stats.topTrackTies > 1 ? ` · empatada com outras ${stats.topTrackTies - 1}` : ''}` : '', top ? { action: 'top-track', key: trackKey(top) } : null)}
+      ${tile('Artista mais ouvido', topA ? topA.artist : '—', topA ? `${fmtNum(topA.count)} scrobbles${stats.topArtistTies > 1 ? ` · empatado com outros ${stats.topArtistTies - 1}` : ''}` : '', topA ? { action: 'top-artist', key: topA.artist } : null)}
+      ${tile('Scrobbles muito próximos', fmtNum(stats.shortGaps), `menos de ${AUDIT.shortGapSeconds} segundos depois do anterior`, null, stats.shortGaps > 0 ? 'tile-flag' : '')}
     </div>
-    ${isFiltered ? html`<p class="muted small filtered-note">${icon('filter', 12)} Estatísticas e gráficos refletem os filtros ativos.</p>` : ''}`,
+    ${isFiltered ? html`<p class="muted small filtered-note">${icon('filter', 12)} Os números e gráficos mostram só o que passa pelos filtros.</p>` : ''}`,
   );
 }
 
 function tile(label, value, sub = '', action = null, cls = '') {
-  const inner = html`<span class="tile-label">${label}</span><span class="tile-value" title="${value}">${value}</span>${sub ? html`<span class="tile-sub">${sub}</span>` : ''}`;
+  const inner = html`<span class="tile-label">${label}</span><span class="tile-value" title="${value}">${value}</span>${sub ? html`<span class="tile-sub" title="${sub}">${sub}</span>` : ''}`;
   return action
     ? html`<button type="button" class="tile tile-action ${cls}" data-action="${action.action}" data-key="${action.key}">${inner}</button>`
     : html`<div class="tile ${cls}">${inner}</div>`;
@@ -407,23 +405,23 @@ function renderCharts(el, s, app) {
     el,
     html`<section class="card chart-card chart-wide">
         <h3 class="card-title">Scrobbles ${unitLabel}</h3>
-        ${columnChart({ data: tl.buckets.map((b) => ({ label: b.label, value: b.count, tip: `${b.fullLabel}: ${fmtNum(b.count)} scrobbles` })), ariaLabel: `Scrobbles ${unitLabel} no intervalo`, maxLabels: 7 })}
+        ${columnChart({ data: tl.buckets.map((b) => ({ label: b.label, value: b.count, tip: `${b.fullLabel}: ${fmtNum(b.count)} scrobbles` })), ariaLabel: `Scrobbles ${unitLabel} no período`, maxLabels: 7 })}
       </section>
       <section class="card chart-card">
-        <h3 class="card-title">Por hora do dia <span class="muted small">(${app.derived.timeZone()})</span></h3>
-        ${columnChart({ data: stats.byHour.map((v, h) => ({ label: `${String(h).padStart(2, '0')}h`, value: v })), ariaLabel: 'Scrobbles por hora do dia', maxLabels: 8 })}
+        <h3 class="card-title">Em que horário do dia</h3>
+        ${columnChart({ data: stats.byHour.map((v, h) => ({ label: `${String(h).padStart(2, '0')}h`, value: v })), ariaLabel: 'Scrobbles por horário do dia', maxLabels: 8 })}
       </section>
       <section class="card chart-card">
-        <h3 class="card-title">Por dia da semana</h3>
+        <h3 class="card-title">Em que dia da semana</h3>
         ${columnChart({ data: stats.byWeekday.map((v, d) => ({ label: WEEKDAYS[d], value: v })), ariaLabel: 'Scrobbles por dia da semana', maxLabels: 7 })}
       </section>
       <section class="card chart-card">
-        <h3 class="card-title">Top artistas</h3>
-        ${barList({ rows: stats.topArtists.map((t) => ({ label: t.artist, value: t.count, key: t.artist })), ariaLabel: 'Top artistas', action: 'top-artist' })}
+        <h3 class="card-title">Artistas mais ouvidos</h3>
+        ${barList({ rows: stats.topArtists.map((t) => ({ label: t.artist, value: t.count, key: t.artist })), ariaLabel: 'Artistas mais ouvidos', action: 'top-artist' })}
       </section>
       <section class="card chart-card">
-        <h3 class="card-title">Top músicas</h3>
-        ${barList({ rows: stats.topTracks.map((t) => ({ label: t.track, sub: t.artist, value: t.count, key: trackKey(t) })), ariaLabel: 'Top músicas', action: 'top-track' })}
+        <h3 class="card-title">Músicas mais ouvidas</h3>
+        ${barList({ rows: stats.topTracks.map((t) => ({ label: t.track, sub: t.artist, value: t.count, key: trackKey(t) })), ariaLabel: 'Músicas mais ouvidas', action: 'top-track' })}
       </section>`,
   );
 }
@@ -437,14 +435,14 @@ function renderFilters(el, app) {
     html`<details class="filters-details" open>
       <summary class="filters-summary"><span class="card-title">${icon('filter', 16)} Filtros <span class="badge" id="filter-count" hidden></span></span></summary>
       <div class="filters-body">
-        <label class="field"><span class="field-label">Busca livre</span><input type="search" data-filter="query" placeholder="artista, música ou álbum" /></label>
+        <label class="field"><span class="field-label">Buscar</span><input type="search" data-filter="query" placeholder="artista, música ou álbum" /></label>
         <label class="field"><span class="field-label">Artista</span><input type="search" data-filter="artist" /></label>
         <label class="field"><span class="field-label">Música</span><input type="search" data-filter="track" /></label>
         <label class="field"><span class="field-label">Álbum</span><input type="search" data-filter="album" /></label>
-        <label class="check"><input type="checkbox" data-filter="exact" /> Correspondência exata <span class="muted small">(ignora maiúsculas/acentos)</span></label>
+        <label class="check"><input type="checkbox" data-filter="exact" /> Só o nome exato <span class="muted small">(sem contar maiúsculas e acentos)</span></label>
 
         <fieldset class="fieldset">
-          <legend>Data <span class="muted small">(dentro do intervalo auditado)</span></legend>
+          <legend>Data</legend>
           <div class="row-2">
             <label class="field"><span class="field-label">De</span><input type="date" data-filter="dateFrom" /></label>
             <label class="field"><span class="field-label">Até</span><input type="date" data-filter="dateTo" /></label>
@@ -457,31 +455,31 @@ function renderFilters(el, app) {
             <label class="field"><span class="field-label">De</span><input type="time" step="1" data-filter="timeFrom" /></label>
             <label class="field"><span class="field-label">Até</span><input type="time" step="1" data-filter="timeTo" /></label>
           </div>
-          <p class="hint">Inclusivo. Aceita virar a meia-noite (ex.: 22:00 → 02:00).</p>
+          <p class="hint">Pode passar da meia-noite (por exemplo, das 22:00 às 02:00).</p>
           <div class="weekday-chips" role="group" aria-label="Dias da semana">
             ${WEEKDAYS.map((d, i) => html`<button type="button" class="chip chip-sm" data-weekday="${i}" aria-pressed="false">${d}</button>`)}
           </div>
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend>Reproduções da música no período</legend>
+          <legend>Quantas vezes a música tocou no período</legend>
           <div class="row-2">
-            <label class="field"><span class="field-label">Mín.</span><input type="number" min="1" step="1" inputmode="numeric" data-filter="playsMin" /></label>
-            <label class="field"><span class="field-label">Máx.</span><input type="number" min="1" step="1" inputmode="numeric" data-filter="playsMax" /></label>
+            <label class="field"><span class="field-label">No mínimo</span><input type="number" min="1" step="1" inputmode="numeric" data-filter="playsMin" /></label>
+            <label class="field"><span class="field-label">No máximo</span><input type="number" min="1" step="1" inputmode="numeric" data-filter="playsMax" /></label>
           </div>
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend>Duração da faixa (segundos)</legend>
+          <legend>Duração da música (em segundos)</legend>
           <div class="row-2">
-            <label class="field"><span class="field-label">Mín.</span><input type="number" min="0" step="1" inputmode="numeric" data-filter="durationMin" /></label>
-            <label class="field"><span class="field-label">Máx.</span><input type="number" min="0" step="1" inputmode="numeric" data-filter="durationMax" /></label>
+            <label class="field"><span class="field-label">No mínimo</span><input type="number" min="0" step="1" inputmode="numeric" data-filter="durationMin" /></label>
+            <label class="field"><span class="field-label">No máximo</span><input type="number" min="0" step="1" inputmode="numeric" data-filter="durationMax" /></label>
           </div>
-          <label class="check"><input type="checkbox" data-filter="includeUnknownDuration" /> Incluir duração desconhecida</label>
+          <label class="check"><input type="checkbox" data-filter="includeUnknownDuration" /> Incluir músicas sem duração informada</label>
           <p class="hint" id="duration-hint"></p>
         </fieldset>
 
-        <label class="check"><input type="checkbox" data-filter="shortGapOnly" /> Somente scrobbles a menos de ${AUDIT.shortGapSeconds}s de outro</label>
+        <label class="check"><input type="checkbox" data-filter="shortGapOnly" /> Só scrobbles muito próximos <span class="muted small">(menos de ${AUDIT.shortGapSeconds}s um do outro)</span></label>
 
         <button type="button" class="btn btn-block" data-action="reset-filters">Limpar filtros</button>
       </div>
@@ -520,7 +518,7 @@ function syncFilters(el, filters, durations, audit) {
   const known = audit ? new Set(audit.scrobbles.map(trackKey)) : new Set();
   let k = 0;
   for (const key of known) if (durations.get(key) != null) k++;
-  hint.textContent = audit ? `Duração conhecida para ${fmtNum(k)} de ${fmtNum(known.size)} músicas. Use “Buscar durações” na tabela.` : '';
+  hint.textContent = audit ? `Sabemos a duração de ${fmtNum(k)} de ${fmtNum(known.size)} músicas. Para buscar o resto, use “Buscar durações”, acima da lista.` : '';
 }
 
 /* =============== Resultados =============== */
@@ -586,7 +584,7 @@ function renderResults(el, s, app) {
   setHtml(
     el,
     html`<div class="results-toolbar">
-        <div class="segmented" role="group" aria-label="Visualização">
+        <div class="segmented" role="group" aria-label="Como mostrar">
           ${GROUP_MODES.map((g) => html`<button type="button" data-group="${g.id}" aria-pressed="${String(group === g.id)}">${g.label}</button>`)}
         </div>
         <label class="inline-field"><span class="sr-only">Ordenar</span>
@@ -598,16 +596,18 @@ function renderResults(el, s, app) {
         <span class="spacer"></span>
         ${source.getTrackDuration
           ? job
-            ? html`<button type="button" class="btn btn-sm" data-action="cancel-durations"><span class="spinner spinner-sm"></span> Durações ${fmtNum(job.done)}/${fmtNum(job.total)} · cancelar</button>`
-            : html`<button type="button" class="btn btn-sm" data-action="durations" title="Consulta track.getInfo para cada música única (com cache local)">${icon('clock', 14)} Buscar durações</button>`
+            ? html`<button type="button" class="btn btn-sm" data-action="cancel-durations"><span class="spinner spinner-sm"></span> Buscando durações ${fmtNum(job.done)}/${fmtNum(job.total)} · parar</button>`
+            : html`<button type="button" class="btn btn-sm" data-action="durations" title="Busca na Last.fm quanto tempo dura cada música">${icon('clock', 14)} Buscar durações</button>`
           : ''}
         <details class="dropdown">
           <summary class="btn btn-sm">${icon('download', 14)} Exportar</summary>
           <div class="dropdown-menu" role="menu">
-            <button type="button" role="menuitem" data-export="csv:filtered">CSV — resultado filtrado</button>
-            <button type="button" role="menuitem" data-export="json:filtered">JSON — resultado filtrado</button>
-            <button type="button" role="menuitem" data-export="csv:all">CSV — auditoria completa</button>
-            <button type="button" role="menuitem" data-export="json:all">JSON — auditoria completa</button>
+            <span class="dropdown-label">Só o que está filtrado</span>
+            <button type="button" role="menuitem" data-export="csv:filtered">Planilha (abre no Excel)</button>
+            <button type="button" role="menuitem" data-export="json:filtered">Arquivo para abrir aqui depois</button>
+            <span class="dropdown-label">Auditoria inteira</span>
+            <button type="button" role="menuitem" data-export="csv:all">Planilha (abre no Excel)</button>
+            <button type="button" role="menuitem" data-export="json:all">Arquivo para abrir aqui depois</button>
           </div>
         </details>
       </div>
@@ -616,8 +616,8 @@ function renderResults(el, s, app) {
             ${pagination(page, pages, pageSize, rows.length)}`
         : html`<div class="empty-inline">
             ${s.audit.scrobbles.length
-              ? html`<p>Nenhum resultado para os filtros atuais.</p><button class="btn btn-sm" data-action="reset-filters">Limpar filtros</button>`
-              : html`<p>Nenhum scrobble neste intervalo.</p><p class="muted small">A ${s.audit.sourceName} confirmou 0 scrobbles entre ${formatDateTime(s.audit.range.from, tz)} e ${formatDateTime(s.audit.range.to, tz)}.</p>`}
+              ? html`<p>Nada passou pelos filtros escolhidos.</p><button class="btn btn-sm" data-action="reset-filters">Limpar filtros</button>`
+              : html`<p>Nenhum scrobble nesse período.</p><p class="muted small">A ${s.audit.sourceName} confirmou que não há scrobbles entre ${formatDateTime(s.audit.range.from, tz)} e ${formatDateTime(s.audit.range.to, tz)}.</p>`}
           </div>`}`,
   );
 }
@@ -626,9 +626,9 @@ function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset })
   return html`<table class="table">
     <thead><tr>
       <th class="num">#</th><th>Data</th><th>Horário</th><th>Artista</th><th>Música</th><th>Álbum</th>
-      <th class="num" title="Tempo desde o scrobble anterior">Δ anterior</th>
+      <th class="num" title="Quanto tempo depois do scrobble anterior">Desde o anterior</th>
       ${anyDuration ? html`<th class="num">Duração</th>` : ''}
-      <th class="num" title="Scrobbles desta música no período auditado">Plays</th>
+      <th class="num" title="Quantas vezes esta música tocou no período">Vezes no período</th>
     </tr></thead>
     <tbody>
       ${list.map((s, i) => {
@@ -641,7 +641,7 @@ function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset })
           <td class="ellipsis" title="${s.artist}">${s.artist}</td>
           <td class="ellipsis strong" title="${s.track}">${s.track}</td>
           <td class="ellipsis muted" title="${s.album}">${s.album || '—'}</td>
-          <td class="num nowrap ${short ? 'text-warning' : 'muted'}" ${short ? raw('title="Intervalo menor que o mínimo plausível"') : ''}>${s.gapPrev == null ? '—' : formatDuration(s.gapPrev)}</td>
+          <td class="num nowrap ${short ? 'text-warning' : 'muted'}" ${short ? raw('title="Muito perto do scrobble anterior"') : ''}>${s.gapPrev == null ? '—' : formatDuration(s.gapPrev)}</td>
           ${anyDuration ? html`<td class="num muted">${formatTrackLength(ms)}</td>` : ''}
           <td class="num">${fmtNum(playCounts.get(trackKey(s)))}</td>
         </tr>`;
@@ -657,7 +657,7 @@ function groupTable(list, group, tz) {
     album: html`<th>Álbum</th><th>Artista</th>`,
   }[group];
   return html`<table class="table">
-    <thead><tr><th class="num">#</th>${head}<th class="num">Scrobbles</th><th>Primeiro</th><th>Último</th></tr></thead>
+    <thead><tr><th class="num">#</th>${head}<th class="num">Scrobbles</th><th>Primeira vez</th><th>Última vez</th></tr></thead>
     <tbody>
       ${list.map((g, i) => {
         const attrs =
@@ -671,7 +671,7 @@ function groupTable(list, group, tz) {
           artist: html`<td class="ellipsis strong" title="${g.artist}">${g.artist}</td><td class="num">${fmtNum(new Set(g.items.map((s) => s.track.toLowerCase())).size)}</td>`,
           album: html`<td class="ellipsis strong" title="${g.album}">${g.album}</td><td class="ellipsis" title="${g.artist}">${g.artist}</td>`,
         }[group];
-        return html`<tr data-row ${attrs} tabindex="0" title="${group === 'track' ? 'Ver todos os horários' : 'Filtrar'}">
+        return html`<tr data-row ${attrs} tabindex="0" title="${group === 'track' ? 'Ver todos os horários em que tocou' : 'Mostrar só este'}">
           <td class="num muted">${i + 1}</td>${cells}
           <td class="num strong">${fmtNum(g.count)}</td>
           <td class="nowrap muted">${formatDateTime(g.firstTs, tz, { seconds: false })}</td>
@@ -685,7 +685,7 @@ function groupTable(list, group, tz) {
 function pagination(page, pages, pageSize, total) {
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
-  return html`<nav class="pagination" aria-label="Paginação">
+  return html`<nav class="pagination" aria-label="Páginas">
     <span class="muted small">${fmtNum(from)}–${fmtNum(to)} de ${fmtNum(total)}</span>
     <span class="spacer"></span>
     <label class="inline-field small">Por página

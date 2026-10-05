@@ -7,7 +7,6 @@ import { openSettings } from './ui/views/modals.js';
 import { installTooltips } from './ui/components/overlay.js';
 import { installDropZone } from './ui/components/filePicker.js';
 import { $, $$, html, setHtml, icon } from './ui/dom.js';
-import { browserTimeZone, describeTimeZone } from './core/time.js';
 
 // 1) Fontes de scrobbles. Para adicionar outra, registre-a aqui.
 let app;
@@ -23,15 +22,13 @@ mountRankingView($('#view-ranking'), app);
 installTooltips();
 installDropZone((file) => actions.importFile(file));
 
-// 3) Cabeçalho: abas, timezone, tema, configurações
+// 3) Cabeçalho: abas, tema, configurações
 const header = $('#topbar-actions');
 function renderHeader(s) {
-  const tz = s.settings.timeZone || browserTimeZone();
   const dark = s.settings.theme === 'dark' || (s.settings.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   setHtml(
     header,
-    html`<button class="tz-badge" data-act="settings" title="Timezone usado em toda a aplicação — clique para alterar">${icon('clock', 14)} <span>${describeTimeZone(tz)}</span></button>
-      <button class="btn btn-icon btn-ghost" data-act="theme" aria-label="Alternar tema" title="Alternar tema">${icon(dark ? 'sun' : 'moon', 18)}</button>
+    html`<button class="btn btn-icon btn-ghost" data-act="theme" aria-label="Trocar entre tema claro e escuro" title="Tema claro ou escuro">${icon(dark ? 'sun' : 'moon', 18)}</button>
       <button class="btn btn-icon btn-ghost" data-act="settings" aria-label="Configurações" title="Configurações">${icon('settings', 18)}</button>`,
   );
 }

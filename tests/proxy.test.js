@@ -73,7 +73,7 @@ test('cliente explica quando o proxy não existe (hospedagem estática)', async 
   const limiter = new RateLimiter({ minIntervalMs: 0, sleep: async () => {} });
   const fetchImpl = async () => ({ status: 404, ok: false, json: async () => Promise.reject(new Error('html')) });
   const c = new LastfmClient({ proxyUrl: '/api/lastfm', fetchImpl, limiter, sleep: async () => {} });
-  await assert.rejects(c.getUserInfo('rj'), (e) => /Proxy da API não encontrado/.test(e.message));
+  await assert.rejects(c.getUserInfo('rj'), (e) => /não conseguiu se conectar/.test(e.message));
 });
 
 test('fonte: key própria tem prioridade; sem ela usa o proxy; sem nenhum exige configuração', async () => {

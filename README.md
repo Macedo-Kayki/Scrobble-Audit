@@ -1,225 +1,187 @@
 # Scrobble Audit
 
-**Auditoria e análise de scrobbles do Last.fm por intervalo exato de data e hora.**
-Responda perguntas como *"o que eu ouvi entre 08:00 e 13:00 de 05/10?"* ou *"em que horários essa música foi scrobblada?"* com precisão de segundo e contagem conferida contra a própria Last.fm.
+**Veja exatamente o que alguém ouviu em qualquer período, com os scrobbles da Last.fm.**
+
+Quer saber o que tocou na sua conta entre 08:00 e 13:00 de um dia? Em que horários uma música foi ouvida? Quem ouviu mais música na última semana? O Scrobble Audit responde isso em poucos cliques, mostrando cada música no horário exato em que foi registrada e conferindo o total com a própria Last.fm.
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
-![Zero dependências](https://img.shields.io/badge/depend%C3%AAncias-0-brightgreen.svg)
-![Sem build](https://img.shields.io/badge/build-nenhum-brightgreen.svg)
 [![Deploy na Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmacedo-kayki%2Fscrobble-audit&env=LASTFM_API_KEY&envDescription=API%20key%20da%20Last.fm%20%28fica%20s%C3%B3%20no%20servidor%29&envLink=https%3A%2F%2Fwww.last.fm%2Fapi%2Faccount%2Fcreate&project-name=scrobble-audit)
 
-![Painel de auditoria do Scrobble Audit](docs/screenshot.png)
-<sub>Captura com dados simulados.</sub>
+![Tela de auditoria do Scrobble Audit](docs/screenshot.png)
+<sub>Imagem com dados de exemplo.</sub>
+
+> **O que é um scrobble?** É o registro que a Last.fm guarda toda vez que você ouve uma música, no Spotify, no YouTube Music, no celular ou em qualquer app conectado. Cada scrobble tem a música, o artista e o horário em que tocou.
 
 ---
 
-## Sumário
+## O que dá para fazer
 
-- [Funcionalidades](#funcionalidades)
-- [Como a precisão é garantida](#como-a-precisão-é-garantida)
-- [Segurança da API key](#segurança-da-api-key)
-- [Deploy na Vercel](#deploy-na-vercel)
-- [Rodando localmente](#rodando-localmente)
-- [Como usar](#como-usar)
-- [Limitações conhecidas](#limitações-conhecidas)
-- [Arquitetura](#arquitetura)
-- [Testes](#testes)
-- [Contribuindo](#contribuindo)
-- [Licença](#licença)
+- **Escolher qualquer período**, até o segundo: "hoje das 08:00 às 13:00", "de sexta à noite até domingo", "o mês passado inteiro".
+- **Ver cada música ouvida** nesse período, com data e horário.
+- **Ter certeza de que nada ficou de fora.** No fim, o total encontrado é comparado com o que a Last.fm informa. Se bater, aparece **"Tudo conferido"**.
+- **Descobrir todas as vezes que uma música tocou**: é só clicar nela.
+- **Filtrar** por artista, música, álbum, dia, horário do dia (inclusive de madrugada, como das 22:00 às 02:00), dia da semana e muito mais.
+- **Ver resumos e gráficos**: total de scrobbles, músicas e artistas mais ouvidos, horários e dias da semana em que mais se ouve música.
+- **Montar um ranking** e comparar quantos scrobbles cada pessoa fez **no mesmo período**.
+- **Baixar os resultados** como planilha (abre no Excel) ou como arquivo para abrir no Scrobble Audit depois.
+- **Abrir de novo** uma auditoria ou um ranking que você baixou, sem buscar tudo outra vez, ou mandar o arquivo para outra pessoa abrir.
 
-## Funcionalidades
-
-- **Qualquer intervalo, com segundos.** Os scrobbles são filtrados pelo timestamp real de cada um, não pelos períodos fixos da Last.fm ("7 dias", "1 mês").
-- **Contagem verificada.** Ao final, o total coletado é comparado com o total oficial informado pela API, e o resultado aparece como *verificada*, *incompleta* ou *divergente*.
-- **Timezone explícito.** Escolha qualquer timezone IANA (ex.: `America/Sao_Paulo (UTC−03:00)`). O intervalo é interpretado nele e todos os horários são exibidos nele, com horário de verão tratado corretamente.
-- **Filtros:** busca livre, artista, música e álbum (contém ou exato, sem diferenciar maiúsculas e acentos), datas, janela de horário do dia (inclusive atravessando a meia-noite, como 22:00 → 02:00), dias da semana, duração da faixa, nº de reproduções no período e scrobbles muito próximos (< 30 s).
-- **Todos os horários de uma música**, agrupados por dia e com distribuição por hora.
-- **Visualizações** por scrobble ou agrupadas por música, artista ou álbum, com ordenação por horário, nome ou quantidade.
-- **Estatísticas e gráficos:** totais, músicas, artistas e álbuns únicos, mais ouvidos (com empates), linha do tempo, distribuição por hora e por dia da semana, top artistas e top músicas.
-- **Ranking de usuários** comparados **exatamente no mesmo intervalo**.
-- **Exportação** em CSV e JSON (resultado filtrado, auditoria completa ou ranking).
-- **Importação** dos arquivos exportados: reabra uma auditoria ou um ranking sem consultar a Last.fm de novo, ou compartilhe o arquivo com outra pessoa. Basta usar o botão **Importar** ou arrastar o arquivo para a página.
-- **Persistência local:** configurações, filtros, histórico, última auditoria e ranking ficam no `localStorage` do seu navegador e sobrevivem ao recarregar a página.
-- Tratamento de usuário inexistente, perfil privado, limite da API (com retentativa e backoff automáticos), API fora do ar, falhas de rede e cancelamento.
-- Tema claro/escuro, layout responsivo e navegação por teclado.
+Todos os horários aparecem no **horário de Brasília**.
 
 ![Ranking de usuários](docs/ranking.png)
-<sub>Captura com dados simulados.</sub>
+<sub>Imagem com dados de exemplo.</sub>
 
-## Como a precisão é garantida
+## Como usar
 
-O método `user.getRecentTracks` da Last.fm devolve no máximo 200 scrobbles por página, do mais novo para o mais antigo. Paginar por número de página falha de dois jeitos: se um scrobble novo chega durante a busca, as páginas se deslocam e um item é pulado; e a documentação não diz se `from`/`to` são inclusivos. O Scrobble Audit resolve assim:
+1. **Digite o nome de usuário** da Last.fm de quem você quer ver (o seu ou de outra pessoa com perfil público).
+2. **Escolha o período** em "De" e "Até", ou clique em um atalho: *Hoje*, *Ontem*, *Últimos 7 dias*…
+3. Clique em **Auditar** e espere a busca terminar. Dá para acompanhar o progresso e cancelar se quiser.
+4. Pronto! Agora você pode:
+   - clicar em **uma linha da lista** para ver os detalhes daquele scrobble;
+   - clicar em **uma música** para ver todas as vezes em que ela tocou;
+   - usar os **filtros** à esquerda (os números e gráficos acompanham os filtros);
+   - trocar a lista para **Por música**, **Por artista** ou **Por álbum**;
+   - clicar em **Exportar** para baixar uma planilha ou um arquivo.
 
-1. **Janela com folga de 1 s.** A API é consultada com `from − 1` e `to + 1`, e o intervalo exato (`início ≤ ts ≤ fim`) é aplicado localmente. O resultado fica correto qualquer que seja a semântica da API.
-2. **Cursor de tempo, não número de página.** Cada requisição pede `to = (scrobble mais antigo já visto) + 1`. Scrobbles que chegam durante a auditoria, inclusive offline com data retroativa, não deslocam nada.
-3. **Deduplicação que preserva duplicatas legítimas.** O segundo de fronteira é relido de propósito. Para cada scrobble idêntico, guarda-se a maior quantidade vista em *uma única* resposta: releituras não duplicam, e dois scrobbles idênticos legítimos não se perdem.
-4. **Segundos lotados.** Se um único segundo tiver 200 scrobbles ou mais (importações), ele é paginado isoladamente.
-5. **Paralelismo seguro.** Volumes grandes são divididos em fatias de tempo disjuntas percorridas em paralelo, sob um limite global de ≈4 requisições/s.
-6. **Verificação e reconciliação.** No fim, a contagem é conferida com um novo total oficial. Se faltar algo, a janela é percorrida de novo, até 2 vezes.
+### Ranking
 
-Cada um desses cenários tem teste automatizado com uma API simulada. O algoritmo também foi validado contra a API real: uma auditoria de 10 anos (23.903 scrobbles) bateu exatamente com o total da Last.fm.
+1. Na aba **Auditoria**, escolha o período que quer comparar.
+2. Na aba **Ranking**, clique em **Usar o período da aba Auditoria**.
+3. Digite os nomes de usuário e clique em **Colocar no ranking**.
 
-> **Nada é inventado.** Campos que a API não fornece (álbum, MBIDs, imagem, duração) aparecem como "não informado" na tela, vazios no CSV e `null` no JSON.
+Todo mundo é comparado exatamente no mesmo período. Cada pessoa tem os botões **Ver** (abre a auditoria completa), **Atualizar** (busca de novo) e **Tirar** (remove do ranking).
 
-## Segurança da API key
+### Abrir um arquivo baixado
 
-Num app que roda no navegador, qualquer key que o navegador use fica visível no "Inspecionar" (aba Network, código-fonte, `localStorage`), e ofuscar não resolve. Por isso **a key nunca vai para o frontend**: o navegador chama `/api/lastfm` sem key, e um proxy no servidor acrescenta a key antes de repassar à Last.fm.
+Clique em **Importar**, ou simplesmente arraste o arquivo para a página. O Scrobble Audit reconhece sozinho se é uma auditoria ou um ranking. Uma auditoria aberta de arquivo aparece como **"Aberto de um arquivo"**, e o botão **Auditar de novo** confere tudo outra vez na Last.fm.
 
-| Ambiente | Proxy | Onde a key fica |
-|---|---|---|
-| Vercel (produção) | [`api/lastfm.js`](api/lastfm.js) — Vercel Function | variável de ambiente `LASTFM_API_KEY` |
-| Local | [`servidor.py`](servidor.py) | arquivo `.env` (no `.gitignore`) |
+## Perguntas frequentes
 
-Os dois proxies seguem as mesmas regras:
+**Preciso de senha ou de login?**
+Não. O Scrobble Audit só lê informações públicas da Last.fm. Você nunca digita sua senha.
 
-- aceitam só os métodos de leitura que o app usa (`user.getrecenttracks`, `user.getinfo`, `track.getinfo`);
-- repassam só parâmetros conhecidos e descartam qualquer `api_key` enviada pelo cliente;
-- nunca devolvem a key nas respostas;
-- não enviam cabeçalhos CORS e recusam requisições *cross-site* do navegador, então outros sites não conseguem usar o seu proxy.
+**Consigo ver qualquer pessoa?**
+Qualquer pessoa com perfil público na Last.fm. Quem deixou o histórico privado não pode ser auditado.
 
-O site é servido com uma **Content Security Policy** restritiva (veja [`vercel.json`](vercel.json)): só scripts do próprio domínio, sem `eval` e sem scripts inline. Os nomes de músicas, que vêm de terceiros, são sempre escapados antes de entrar no HTML.
+**Meus dados ficam guardados em algum lugar?**
+Só no seu próprio navegador: histórico de nomes pesquisados, ranking e a última auditoria, para nada se perder quando você recarregar a página. Para apagar tudo, use **Configurações → Apagar tudo**.
 
-> **Sobre abuso de cota.** As regras acima impedem o uso do proxy por *outros sites*, mas um script fora do navegador ainda consegue chamá-lo e consumir a cota da sua key (a key em si continua invisível). Para instâncias públicas, considere uma regra de *rate limiting* no **Vercel Firewall**.
+**O que significa "Tudo conferido"?**
+Que o número de scrobbles encontrados é exatamente o número que a Last.fm informa para aquele período. Se aparecer **"Faltaram alguns scrobbles"**, é só clicar em Auditar de novo.
 
-Em **Configurações**, o visitante pode colar a **própria** key. Nesse caso ela é usada diretamente e fica visível só no navegador dele.
+**O que são "scrobbles muito próximos"?**
+Scrobbles registrados com menos de 30 segundos de diferença entre um e outro. Como uma música precisa tocar por um tempo para virar scrobble, isso pode indicar registros duplicados ou estranhos. Vale dar uma olhada.
 
-## Deploy na Vercel
+**A planilha abriu toda em uma coluna só no Excel. E agora?**
+Em **Configurações → Formato da planilha**, troque a opção e baixe de novo.
 
-O site é estático e o proxy é uma única Vercel Function. Não há etapa de build.
+**Por que algumas músicas aparecem sem álbum ou sem duração?**
+Porque a Last.fm não tem essa informação para elas. O Scrobble Audit mostra "não informado" em vez de inventar. A duração não vem junto com os scrobbles: para ver, clique em **Buscar durações**.
 
-**Com um clique:** use o botão **Deploy na Vercel** no topo desta página e informe sua `LASTFM_API_KEY` quando for pedida.
+**A busca está demorando.**
+Períodos com dezenas de milhares de scrobbles podem levar alguns minutos, porque a Last.fm entrega os dados aos poucos. Se aparecer "Muitos pedidos agora", espere um pouco: o Scrobble Audit tenta de novo sozinho.
+
+---
+
+## Para desenvolvedores
+
+> A partir daqui o texto é técnico: instalação, publicação e funcionamento interno.
+
+O site é estático, sem framework, sem etapa de build e sem dependências: HTML, CSS e JavaScript (ES modules). A única parte de servidor é um proxy mínimo que guarda a API key da Last.fm, para que ela nunca chegue ao navegador.
+
+### Publicar na Vercel
+
+**Com um clique:** use o botão **Deploy na Vercel** no topo e informe a `LASTFM_API_KEY` quando pedir.
 
 **Manualmente:**
 
 1. Obtenha uma API key em <https://www.last.fm/api/account/create>. O *Callback URL* pode ficar vazio, e o *shared secret* não é usado.
-2. Na Vercel: **Add New → Project** e importe este repositório.
-3. Em **Framework Preset**, escolha **Other**. Deixe *Build Command* e *Output Directory* vazios.
-4. Em **Environment Variables**, adicione `LASTFM_API_KEY` com a sua key.
-5. Clique em **Deploy**.
+2. Na Vercel: **Add New → Project** e importe o repositório.
+3. Em **Framework Preset**, escolha **Other**. Deixe *Build Command*, *Output Directory* e *Install Command* vazios.
+4. Em **Environment Variables**, adicione `LASTFM_API_KEY`.
+5. Clique em **Deploy**. Se trocar a key depois, faça um *Redeploy* para ela valer.
 
-O frontend já aponta para `/api/lastfm` por padrão ([`site.config.js`](site.config.js)), então não há mais nada a configurar. Se trocar a key depois, faça um *redeploy* para ela valer.
+### Rodar localmente
 
-> Para hospedar em um serviço **só estático** (GitHub Pages, Netlify sem functions etc.), defina `proxyUrl: ''` em `site.config.js`. Assim cada visitante informa a própria key em Configurações.
-
-## Rodando localmente
-
-Requisitos: **Python 3.8+**. Nenhuma outra dependência.
+Requisito: Python 3.8+.
 
 ```bash
 git clone https://github.com/macedo-kayki/scrobble-audit.git
 cd scrobble-audit
-cp .env.example .env        # edite e preencha LASTFM_API_KEY=...
-python servidor.py          # http://localhost:5173  (use --open para abrir o navegador)
+cp .env.example .env        # preencha LASTFM_API_KEY=...
+python servidor.py          # http://localhost:5173  (--open abre o navegador)
 ```
 
-O `servidor.py` serve o site e o proxy em `/api/lastfm`, com os mesmos cabeçalhos de segurança da produção. O comportamento local é idêntico ao da Vercel.
+O `servidor.py` serve o site e o proxy em `/api/lastfm`, com os mesmos cabeçalhos de segurança da produção. Abrir o `index.html` direto do disco (`file://`) não funciona, porque o navegador bloqueia ES modules nesse modo.
 
-> Abrir o `index.html` com duplo clique (`file://`) **não funciona**, porque o navegador bloqueia ES modules nesse modo. Use sempre um servidor.
+### Segurança da API key
 
-## Como usar
+| Ambiente | Proxy | Onde a key fica |
+|---|---|---|
+| Vercel | [`api/lastfm.js`](api/lastfm.js) (Vercel Function) | variável de ambiente `LASTFM_API_KEY` |
+| Local | [`servidor.py`](servidor.py) | arquivo `.env` (no `.gitignore`) |
 
-1. **Auditoria.** Informe o usuário, o início e o fim (com segundos, se quiser) e o timezone, ou use um atalho (Hoje, Ontem, Últimas 24h…). A linha abaixo do formulário mostra o intervalo exato em horário local e em Unix.
-2. **Auditar.** O progresso mostra quantos scrobbles já foram baixados do total esperado. Acima de 20 mil o app pede confirmação, e é possível cancelar a qualquer momento.
-3. **Verificação.** O cartão verde confirma que a contagem bate com a Last.fm. Em **Detalhes da auditoria** aparecem a janela consultada, os totais, as requisições e o método usado.
-4. **Filtros.** Use o painel à esquerda. Estatísticas e gráficos passam a refletir o conjunto filtrado.
-5. **Detalhes.** Clique em um scrobble para ver timestamp Unix, UTC e horário local, além do intervalo para o anterior e o próximo. Clique em uma música para ver **todos os horários** em que ela foi scrobblada.
-6. **Durações** (opcional). A Last.fm não envia duração junto com os scrobbles. **Buscar durações** consulta `track.getInfo` uma vez por música única (com cache local) e habilita o filtro de duração.
-7. **Exportar.** CSV ou JSON, filtrado ou completo. Em Configurações dá para trocar o separador do CSV (`;` funciona melhor no Excel em português).
-8. **Ranking.** Clique em *Adicionar ao ranking* ou use a aba **Ranking**. Todos os usuários são auditados no mesmo intervalo, e dá para reauditar, remover e exportar.
-9. **Importar.** Use **Importar** (na auditoria ou no ranking) ou arraste para a página um JSON ou CSV exportado pelo app. O tipo é detectado sozinho: auditoria completa ou filtrada, horários de uma música ou ranking.
-   - Uma auditoria importada é marcada como **Importado de arquivo**: os dados vêm do arquivo e não são reconsultados. O cartão informa se a contagem estava verificada no momento da exportação, e **Reauditar** refaz a consulta na Last.fm com o mesmo usuário e intervalo.
-   - O **JSON** guarda tudo, inclusive o intervalo e o timezone. O **CSV** não guarda o intervalo, então ele é derivado do primeiro e do último scrobble (e o app avisa).
-   - Linhas inválidas são ignoradas e contadas. Antes de substituir a auditoria ou o ranking atual, o app pede confirmação.
+O navegador chama `/api/lastfm` sem key, e o proxy acrescenta a key no servidor. Os dois proxies:
 
-**Intervalo e timezone.** O fim é **inclusivo** por padrão (`08:00–13:00` inclui um scrobble às `13:00:00`); em Configurações ele pode virar exclusivo, útil para encadear intervalos sem sobreposição. Se o horário digitado não existe por causa do horário de verão, o app avisa e usa o primeiro instante válido seguinte. Em horários ambíguos, usa a primeira ocorrência.
+- aceitam só os métodos de leitura usados pelo app (`user.getrecenttracks`, `user.getinfo`, `track.getinfo`);
+- descartam parâmetros desconhecidos e qualquer `api_key` vinda do cliente;
+- nunca devolvem a key;
+- não enviam CORS e recusam requisições *cross-site* do navegador.
 
-## Limitações conhecidas
+O site usa uma Content Security Policy restritiva ([`vercel.json`](vercel.json)), e todo conteúdo dinâmico é escapado antes de entrar no HTML. Em instâncias públicas, scripts fora do navegador ainda podem consumir a cota da key; para limitar isso, use uma regra de *rate limiting* no Vercel Firewall. O visitante também pode colar a própria key em Configurações; nesse caso ela é usada direto do navegador dele.
 
-- **Perfis privados.** Se o usuário ocultou o histórico, a Last.fm recusa a consulta.
-- **Limite da API.** Todos os visitantes de uma instância compartilham a mesma key. Sob uso intenso, a Last.fm pode limitar requisições; o app espera e tenta de novo automaticamente.
-- **`localStorage` ≈ 5 MB.** Auditorias muito grandes podem não caber. O app avisa, mantém o resultado em memória e sugere exportar.
-- **Scrobbles excluídos durante a auditoria** podem deixar a contagem coletada maior que o novo total. O app sinaliza como *divergente*.
-- **Durações** vêm do cadastro da Last.fm e nem sempre existem ou correspondem à versão ouvida.
-- **CSV:** valores que começam com `=`, `+`, `-`, `@`, tab ou CR recebem um `'` na frente, para evitar injeção de fórmulas no Excel/Sheets. O JSON mantém os valores originais.
+Para hospedagem só estática (sem functions), defina `proxyUrl: ''` em [`site.config.js`](site.config.js). Assim cada visitante informa a própria key.
 
-## Privacidade
+### Como a busca garante o período exato
 
-As auditorias, os filtros e o ranking ficam **só no seu navegador**. O proxy não armazena nada: ele apenas repassa as consultas (username e intervalo) à Last.fm. Os logs da plataforma de hospedagem podem registrar as URLs dessas requisições.
+O método `user.getRecentTracks` devolve até 200 scrobbles por página, do mais novo para o mais antigo:
 
-## Arquitetura
+1. **Folga de 1 s:** a consulta usa `from − 1` e `to + 1`, e o intervalo exato é aplicado no cliente. O resultado fica correto qualquer que seja a semântica de `from`/`to` da API.
+2. **Cursor de tempo:** cada página pede `to = scrobble mais antigo já visto + 1`, em vez de `page=N`. Scrobbles que chegam durante a busca, inclusive offline com data retroativa, não deslocam as páginas.
+3. **Deduplicação exata:** o segundo de fronteira é relido, e para cada scrobble idêntico fica a maior multiplicidade vista em uma única resposta. Assim duplicatas legítimas são preservadas.
+4. **Segundos com 200 scrobbles ou mais** (importações) são paginados isoladamente.
+5. **Paralelismo:** volumes grandes são divididos em fatias de tempo disjuntas, sob um limite global de ≈4 requisições por segundo.
+6. **Verificação:** o total coletado é comparado com um novo `@attr.total`. Se faltar algo, a janela é percorrida de novo, até 2 vezes.
 
-HTML, CSS e JavaScript puros (ES modules), sem framework, sem build e sem dependências em runtime. A lógica de negócio fica isolada do DOM e é testável no Node.
+Todos esses casos têm testes automatizados. O algoritmo também foi validado contra a API real: uma auditoria de 10 anos (23.903 scrobbles) bateu exatamente com o total da Last.fm.
+
+O fuso horário é fixo (`TIME_ZONE = 'America/Sao_Paulo'` em [`src/config.js`](src/config.js)); para outra região, troque essa constante.
+
+### Estrutura
 
 ```
-index.html                  shell da aplicação
-site.config.js              configuração pública (URL do proxy; nunca contém segredos)
-api/lastfm.js               proxy da Last.fm (Vercel Function)
-servidor.py                 servidor local: site + proxy (key no .env)
-vercel.json                 cabeçalhos de segurança (CSP etc.)
-assets/                     estilos e ícone
+index.html · site.config.js     página e configuração pública (URL do proxy)
+api/lastfm.js                   proxy da Last.fm (Vercel Function)
+servidor.py                     servidor local: site + proxy (key no .env)
+vercel.json                     cabeçalhos de segurança
 src/
-  main.js                   bootstrap: registra fontes e monta as views
-  config.js                 constantes e defaults
-  core/                     lógica pura, sem DOM
-    time.js                 timezones, conversões e formatação
-    model.js                modelo Scrobble e deduplicação exata
-    audit.js                montagem do intervalo e execução da auditoria
-    filters.js · stats.js   filtros, ordenação, agrupamento e estatísticas
-    export.js · importer.js exportação e importação (CSV/JSON)
-    storage.js              localStorage
-    rateLimiter.js · errors.js
+  main.js · config.js           inicialização e constantes
+  core/                         lógica pura, sem DOM (testável no Node)
+    time.js · model.js · audit.js · filters.js · stats.js
+    export.js · importer.js · storage.js · rateLimiter.js · errors.js
   sources/
-    registry.js             interface ScrobbleSource
-    lastfm/client.js        HTTP, retentativas e erros da Last.fm
-    lastfm/source.js        algoritmo de busca exata por intervalo
-  ui/                       estado, componentes e views
-tests/                      testes (node --test) e smoke.html
-docs/                       capturas de tela do README
+    registry.js                 interface ScrobbleSource (novas fontes)
+    lastfm/client.js            HTTP, novas tentativas e erros
+    lastfm/source.js            busca exata por intervalo
+  ui/                           estado, componentes e telas
+tests/                          testes (node --test) e smoke.html
+docs/                           imagens deste README
 ```
 
-### Adicionando outra fonte de scrobbles
+Para adicionar outra fonte de scrobbles (ListenBrainz, Libre.fm…), implemente a interface de [`src/sources/registry.js`](src/sources/registry.js) e registre-a em `src/main.js`. Filtros, estatísticas, exportação e ranking funcionam sem alterações.
 
-A arquitetura aceita outras fontes (ListenBrainz, Libre.fm, Maloja…). Implemente a interface descrita em [`src/sources/registry.js`](src/sources/registry.js):
-
-```js
-{
-  id: 'listenbrainz',
-  name: 'ListenBrainz',
-  capabilities: { userInfo: true, trackDuration: false },
-  profileUrl: (username) => `https://listenbrainz.org/user/${username}`,
-  async getUser(username, { signal }) { /* -> UserInfo */ },
-  async countScrobbles({ user, from, to, signal }) { /* -> number */ },
-  // TODOS os scrobbles com from <= ts <= to (segundos), do mais novo ao mais antigo,
-  // já normalizados para o modelo de src/core/model.js.
-  async fetchScrobbles({ user, from, to, signal, onProgress, confirmLarge }) {
-    return { scrobbles, verification, requests, retries };
-  },
-}
-```
-
-Registre a fonte em `src/main.js` com `registerSource(...)` e converta os erros para `AppError`. Filtros, estatísticas, exportação e ranking funcionam sem alterações.
-
-## Testes
+### Testes
 
 ```bash
 npm test        # node --test "tests/*.test.js"  — Node 20+
 ```
 
-A suíte cobre timezones e horário de verão, filtros, estatísticas, exportação, o algoritmo de paginação (bordas inclusivas e exclusivas, inserções durante a busca, mais de 200 scrobbles no mesmo segundo, duplicatas, páginas vazias, 12 mil scrobbles em paralelo), a importação (ida e volta de todos os formatos exportados, com os três separadores de CSV) e o proxy (a key nunca volta ao cliente; métodos e usos cross-site não autorizados são bloqueados).
+Os testes cobrem fuso horário e horário de verão, filtros, estatísticas, exportação e importação (ida e volta), o algoritmo de busca (com uma API simulada) e o proxy. Para ver a interface sem API key, rode `python servidor.py` e abra `/tests/smoke.html?run=audit`. Essa página usa dados de exemplo e outros cenários: `ranking`, `import`, `notfound`, `ratelimit`, `empty`.
 
-Para ver a interface sem API key, rode `python servidor.py` e abra `/tests/smoke.html?run=audit`. Essa página usa **dados simulados** e mostra uma faixa de aviso. Outros cenários: `?run=ranking`, `import`, `notfound`, `ratelimit` e `empty`, combináveis com `&theme=dark`.
+### Contribuindo
 
-## Contribuindo
-
-Issues e pull requests são bem-vindos.
-
-- Mantenha a lógica de negócio em `src/core/`, sem acesso ao DOM, e acompanhe mudanças com testes em `tests/`.
-- Todo conteúdo dinâmico entra no HTML pelo template `html` de `src/ui/dom.js`, que escapa os valores.
-- Nunca commite `.env` nem coloque API keys em arquivos do frontend.
-- Rode `npm test` antes de abrir o PR.
+Issues e pull requests são bem-vindos. Mantenha a lógica em `src/core/` sem acesso ao DOM, use o template `html` de `src/ui/dom.js` (que escapa os valores) para conteúdo dinâmico, nunca commite `.env` e rode `npm test` antes do PR.
 
 ## Licença
 
-[MIT](LICENSE).
-
-O Scrobble Audit não tem afiliação com a Last.fm. Os dados são obtidos pela [Last.fm API](https://www.last.fm/api), sujeita aos [termos de uso da API](https://www.last.fm/api/tos).
+[MIT](LICENSE). O Scrobble Audit não tem ligação oficial com a Last.fm. Os dados vêm da [Last.fm API](https://www.last.fm/api), sujeita aos [termos de uso](https://www.last.fm/api/tos).

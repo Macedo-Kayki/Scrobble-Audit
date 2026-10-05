@@ -46,12 +46,18 @@ export const AUDIT = Object.freeze({
   shortGapSeconds: 30,
 });
 
+/**
+ * Fuso horário único do app: todos os horários são digitados e exibidos no
+ * horário de Brasília. Para outra região, troque aqui (nome IANA).
+ */
+export const TIME_ZONE = 'America/Sao_Paulo';
+export const TIME_ZONE_LABEL = 'horário de Brasília';
+
 export const DEFAULT_SETTINGS = Object.freeze({
   source: 'lastfm',
   apiKey: '',
-  timeZone: '', // vazio = timezone do navegador
   inclusiveEnd: true,
-  csvDelimiter: ',',
+  csvDelimiter: ';', // Excel em português
   pageSize: 100,
   theme: 'auto', // auto | light | dark
 });

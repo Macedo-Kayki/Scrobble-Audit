@@ -97,7 +97,7 @@ export function createLastfmSource({ getApiKey, proxyUrl = LASTFM.proxyUrl, fetc
 export class RangeFetcher {
   constructor({ client, user, from, to, signal, sleep = defaultSleep, onProgress = () => {}, limit = LASTFM.pageLimit, concurrency = LASTFM.concurrency }) {
     if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) {
-      throw new AppError(ErrorKind.INVALID_INPUT, 'Intervalo inválido: o início deve ser anterior ao fim.');
+      throw new AppError(ErrorKind.INVALID_INPUT, 'O fim precisa ser depois do início.');
     }
     this.client = client;
     this.user = user;
@@ -130,9 +130,9 @@ export class RangeFetcher {
     if (first.totalPages > 1) {
       if (confirmLarge && this.expected > AUDIT.largeAuditThreshold) {
         const ok = await confirmLarge({ expected: this.expected, estimatedRequests: Math.ceil(this.expected / this.limit) + 2 });
-        if (!ok) throw new AppError(ErrorKind.ABORTED, 'Auditoria cancelada antes do download completo.');
+        if (!ok) throw new AppError(ErrorKind.ABORTED, 'Auditoria cancelada.');
       }
-      if (!firstItems.length) throw new AppError(ErrorKind.INCONSISTENT, 'A primeira página veio vazia apesar de haver resultados.');
+      if (!firstItems.length) throw new AppError(ErrorKind.INCONSISTENT);
       // Restante: [qFrom, c] — inclui o segundo `c` para completar o que transbordou da 1ª página.
       const c = Math.min(...firstItems.map((s) => s.ts));
       await this.walkSlices(this.makeSlices(this.qFrom, c, this.expected - firstItems.length));
@@ -221,7 +221,7 @@ export class RangeFetcher {
 
       if (res.totalPages <= 1) return; // última página desta janela
       if (!raw.length) {
-        if (++emptyRetries > 3) throw new AppError(ErrorKind.INCONSISTENT, 'Página vazia recorrente durante a paginação.');
+        if (++emptyRetries > 3) throw new AppError(ErrorKind.INCONSISTENT);
         await this.sleep(1000 * emptyRetries, this.signal);
         continue;
       }
