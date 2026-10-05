@@ -111,3 +111,18 @@ test('o instante da mudança vale para a ordem nova', () => {
   const r = analyzePlaylist([real(18, CHANGE - 150), real(19, CHANGE)], PLAYLIST);
   assert.equal(r.counts.total, 0, '18 → 19 às 10:00 já está na ordem nova');
 });
+
+test('voltar da nº 31 para a nº 1 é normal (antes e depois da mudança)', () => {
+  const after = CHANGE + 3600;
+  const r1 = analyzePlaylist([real(30, after), real(31, after + 150), real(1, after + 300)], PLAYLIST);
+  assert.equal(r1.counts.total, 0, '31 → 1 depois da mudança');
+  assert.equal(r1.stats.inOrder, 2);
+  // Antes da mudança, a nº 31 era o "Interlúdio" (faixa 32 de hoje).
+  const before = CHANGE - 4 * 3600;
+  const r2 = analyzePlaylist([real(31, before), real(32, before + 150), real(1, before + 300)], PLAYLIST);
+  assert.equal(r2.positionById.get(`r32-${before + 150}`), 31);
+  assert.equal(r2.counts.total, 0, '31 → 1 antes da mudança');
+  // Outras voltas para o início continuam contando.
+  const r3 = analyzePlaylist([real(29, after), real(30, after + 150), real(1, after + 300)], PLAYLIST);
+  assert.equal(r3.counts.back, 1, '30 → 1 ainda é voltar');
+});

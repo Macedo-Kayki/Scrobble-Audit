@@ -389,6 +389,10 @@ export const PLAYLIST = Object.freeze({
       "spotifyUri": "spotify:track:7jp61MVBu85XlnnpybInqz"
     }
   ],
+  // Passagens que também contam como "na ordem", além de seguir para a próxima
+  // (e de voltar da última para a primeira). Usam o número da posição na ordem
+  // que valia no momento.
+  alsoInOrder: [{ from: 31, to: 1, note: 'Voltar da nº 31 para a nº 1 é normal e conta como na ordem.' }],
   // Ordem da playlist ao longo do tempo. `tracks` acima está na ordem ATUAL; cada versão
   // lista as músicas pelo número atual (position) na ordem que valia a partir de `from`
   // (horário de Brasília), até a próxima versão. A análise usa a versão de cada momento.
