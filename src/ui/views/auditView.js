@@ -734,7 +734,7 @@ function renderResults(el, s, app) {
 function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset, positions, highlight }) {
   return html`<table class="table">
     <thead><tr>
-      <th class="num">#</th><th>Data</th><th>Horário</th>${positions ? html`<th class="num" title="Posição da música na playlist">Nº na playlist</th>` : ''}<th>Artista</th><th>Música</th><th>Álbum</th>
+      <th class="num">#</th><th>Data</th><th>Horário</th>${positions ? html`<th class="num" title="Posição da música na playlist">Nº na playlist</th>` : ''}<th>Música</th><th>Artista</th><th>Álbum</th>
       <th class="num" title="Quanto tempo depois do scrobble anterior">Desde o anterior</th>
       ${anyDuration ? html`<th class="num">Duração</th>` : ''}
       <th class="num" title="Quantas vezes esta música tocou no período">Vezes no período</th>
@@ -748,8 +748,8 @@ function scrobbleTable(list, { tz, playCounts, durations, anyDuration, offset, p
           <td class="nowrap">${formatDate(s.ts, tz)}</td>
           <td class="nowrap mono">${formatTime(s.ts, tz)}</td>
           ${positions ? html`<td class="num"><span class="pl-pos">nº ${positions.get(s.id)}</span></td>` : ''}
-          <td class="ellipsis" title="${s.artist}">${s.artist}</td>
           <td class="ellipsis strong cover-col" title="${s.track}">${withCover(s.image, s.track)}</td>
+          <td class="ellipsis" title="${s.artist}">${s.artist}</td>
           <td class="ellipsis muted" title="${s.album}">${s.album || '—'}</td>
           <td class="num nowrap ${short ? 'text-warning' : 'muted'}" ${short ? raw('title="Muito perto do scrobble anterior"') : ''}>${s.gapPrev == null ? '—' : formatDuration(s.gapPrev)}</td>
           ${anyDuration ? html`<td class="num muted">${formatTrackLength(ms)}</td>` : ''}
