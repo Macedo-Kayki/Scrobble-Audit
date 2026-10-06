@@ -103,10 +103,17 @@ test('sair da nº 19 para qualquer outra não conta como pulo', () => {
     assert.equal(r.counts.total, 0, `19 → ${next}`);
     assert.equal(r.stats.inOrder, r.stats.transitions);
   }
-  // Chegar na 19 pulando continua contando, e repetir a 19 também.
+});
+
+test('entrar na nº 19 pulando não conta como pulo', () => {
+  for (const from of [10, 18, 20, 32]) {
+    const r = analyzePlaylist(seq([from, 19]), PLAYLIST);
+    assert.equal(r.counts.total, 0, `${from} → 19`);
+    assert.equal(r.stats.inOrder, r.stats.transitions);
+  }
   const r2 = analyzePlaylist(seq([10, 19, 19]), PLAYLIST);
-  assert.equal(r2.counts.skip, 1, '10 → 19 pulou');
   assert.equal(r2.counts.repeat, 1, '19 → 19 repetiu');
+  assert.equal(r2.counts.skip, 0, '10 → 19 não é pulo');
 });
 
 test('voltar da nº 31 para a nº 1 é normal; da nº 30 para a nº 1, não', () => {

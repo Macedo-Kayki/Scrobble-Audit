@@ -115,6 +115,7 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
   const index = buildPlaylistIndex(playlist);
   const versions = buildVersions(playlist);
   const alsoInOrder = new Set((playlist.alsoInOrder || []).map((r) => `${r.from}>${r.to}`));
+  const noSkipTo = new Set((playlist.noSkipTo || []).map((r) => r.track));
   const noSkipFrom = new Set((playlist.noSkipFrom || []).map((r) => r.track));
   const asc = [...scrobbles].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
   const positionById = new Map();
@@ -167,7 +168,8 @@ export function analyzePlaylist(scrobbles, playlist, { sessionGapSec = SESSION_G
       }
       transitions++;
       const freeExit = noSkipFrom.has(prev.track) && track !== prev.track; // pulo a partir dela não conta
-      if (track === expectedTrack || alsoInOrder.has(`${prevPos}>${pos}`) || freeExit) inOrder++;
+      const freeEntry = noSkipTo.has(track); // pulo para ela não conta
+      if (track === expectedTrack || alsoInOrder.has(`${prevPos}>${pos}`) || freeExit || freeEntry) inOrder++;
       else {
         const type = track === prev.track ? 'repeat' : prevPos === N || pos > prevPos ? 'skip' : 'back';
         counts[type]++;
